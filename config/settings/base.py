@@ -108,12 +108,8 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
-    "ACCESS_TOKEN_LIFETIME": timedelta(
-        minutes=config("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", default=15, cast=int)
-    ),
-    "REFRESH_TOKEN_LIFETIME": timedelta(
-        days=config("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7, cast=int)
-    ),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=config("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", default=15, cast=int)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=config("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7, cast=int)),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": False,
@@ -123,6 +119,7 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
 
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
+MANAGEMENT_SERVICE_URL = config("MANAGEMENT_SERVICE_URL", default="http://management:8006")
 OTP_TTL_SECONDS = config("OTP_TTL_SECONDS", default=600, cast=int)
 
 GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
@@ -151,3 +148,6 @@ SPECTACULAR_SETTINGS = {
 # Security: account lockout after N failed attempts
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 ACCOUNT_LOCKOUT_MINUTES = 15
+
+# superadmin IP whitelist; empty list allows all staff (open in dev, explicit in prod)
+SUPERADMIN_ALLOWED_IPS: list[str] = config("SUPERADMIN_ALLOWED_IPS", default="", cast=Csv())
