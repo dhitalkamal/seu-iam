@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.domain.exceptions import InvalidTokenError
 from apps.users.domain.repositories import ITokenBlacklistService, ITokenService
+from apps.users.infrastructure.org_role_client import OrgRoleClient
 
 
 def extract_jti(refresh_token_str: str) -> uuid.UUID:
@@ -20,17 +21,25 @@ class JWTTokenService(ITokenService):
     """Generates simplejwt access and refresh token pairs for a given user ID."""
 
     def generate_for_user(self, user_id: uuid.UUID) -> tuple[str, str]:
-        """Return (access_token, refresh_token) with email claim embedded.
+        """Return (access_token, refresh_token) with email, staff flags, and org_roles claims.
 
         Email is added so downstream services can enforce domain-restricted
-        events without a cross-service DB lookup.
+        events without a cross-service DB lookup. org_roles carries the
+        {org_id: role} mapping fetched from management-service (cached in Redis).
         """
         from apps.users.infrastructure.models import User
 
         user = User.objects.get(pk=user_id)
+        org_roles = OrgRoleClient().get_org_roles(user_id)
         refresh = RefreshToken.for_user(user)
         refresh["email"] = user.email
+        refresh["is_staff"] = user.is_staff
+        refresh["is_superuser"] = user.is_superuser
+        refresh["org_roles"] = org_roles
         refresh.access_token["email"] = user.email
+        refresh.access_token["is_staff"] = user.is_staff
+        refresh.access_token["is_superuser"] = user.is_superuser
+        refresh.access_token["org_roles"] = org_roles
         return str(refresh.access_token), str(refresh)
 
 
