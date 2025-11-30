@@ -14,7 +14,7 @@ from apps.users.infrastructure.backup_code_models import MFABackupCode
 
 _ALPHABET = string.ascii_uppercase + string.digits
 _CODE_LENGTH = 8
-_CODES_PER_USER = 8
+_CODES_PER_USER = 10
 
 
 def _generate_raw_code() -> str:
@@ -29,13 +29,11 @@ class BackupCodeService:
         """
         Delete all existing codes and generate a fresh set.
 
-        Returns the plaintext codes — these are shown once and never stored in plain text.
+        Returns the plaintext codes; these are shown once and never stored in plain text.
         """
         MFABackupCode.objects.filter(user_id=user_id).delete()
         raw_codes = [_generate_raw_code() for _ in range(_CODES_PER_USER)]
-        MFABackupCode.objects.bulk_create(
-            [MFABackupCode(user_id=user_id, code_hash=make_password(code)) for code in raw_codes]
-        )
+        MFABackupCode.objects.bulk_create([MFABackupCode(user_id=user_id, code_hash=make_password(code)) for code in raw_codes])
         return raw_codes
 
     def verify_and_consume(self, user_id: uuid.UUID, code: str) -> None:

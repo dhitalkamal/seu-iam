@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from apps.common.api.responses import created_response, error_response, success_response
 from apps.common.health import check_database, check_rabbitmq, check_redis
+from apps.common.permissions import IsSuperAdminFromAllowedIP
 from apps.users.application.use_cases.admin_user_management import (
     ActivateUserUseCase,
     ListUsersUseCase,
@@ -283,6 +284,7 @@ class RegisterView(APIView):
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    throttle_scope = "registration"
 
     @extend_schema(
         tags=["Auth"],
@@ -330,6 +332,7 @@ class LoginView(APIView):
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    throttle_scope = "login"
 
     @extend_schema(
         tags=["Auth"],
@@ -537,6 +540,7 @@ class RequestPasswordResetView(APIView):
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    throttle_scope = "password_reset"
 
     @extend_schema(
         tags=["Auth"],
@@ -1111,10 +1115,89 @@ class GoogleSocialAuthView(APIView):
         )
 
 
+class GithubSocialAuthView(APIView):
+    """Sign in or register with a GitHub OAuth access token."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Social Auth"],
+        summary="Sign in with GitHub",
+        description=(
+            "Accepts a GitHub OAuth access token obtained from the GitHub OAuth flow. "
+            "Fetches the user profile from the GitHub API, then either logs in the existing "
+            "account or creates a new one. "
+            "Existing accounts registered with email/password are automatically linked by email. "
+            "Returns JWT tokens and a flag indicating whether a new account was created."
+        ),
+        auth=[],
+        request=inline_serializer(
+            name="GithubSocialAuthRequest",
+            fields={"access_token": serializers.CharField(help_text="GitHub OAuth access token.")},
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Sign-in successful. JWT tokens issued.",
+                response=inline_serializer(
+                    name="GithubSocialAuthEnvelope",
+                    fields={
+                        "data": inline_serializer(
+                            name="GithubSocialAuthData",
+                            fields={
+                                "access_token": serializers.CharField(),
+                                "refresh_token": serializers.CharField(),
+                                "is_new_user": serializers.BooleanField(help_text="True if a new account was created during this sign-in."),
+                            },
+                        ),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            401: _R401,
+            403: _R403,
+            422: _R422,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Fetch the GitHub profile and return JWT tokens."""
+        from apps.users.application.use_cases.github_social_auth import GithubSocialAuthUseCase
+        from apps.users.infrastructure.github_verifier import GithubTokenVerifier
+
+        token = request.data.get("access_token", "")
+        if not token:
+            return Response({"error": "access_token is required."}, status=422)
+
+        result = GithubSocialAuthUseCase(DjangoUserRepository(), GithubTokenVerifier(), JWTTokenService()).execute(access_token=token)
+
+        if result.refresh_token:
+            _create_session(request, result.refresh_token)
+        try:
+            user = DjangoUserRepository().get_by_email(GithubTokenVerifier().verify(token)["email"])
+            _audit(
+                request,
+                user.id,
+                AuditEventType.SOCIAL_AUTH_GITHUB,
+                {"is_new_user": result.is_new_user},
+            )
+        except Exception:
+            pass
+
+        return success_response(
+            {
+                "access_token": result.access_token,
+                "refresh_token": result.refresh_token,
+                "is_new_user": result.is_new_user,
+            },
+            request=request,
+        )
+
+
 class AdminUserListView(APIView):
     """Superadmin: list all platform users."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1128,8 +1211,6 @@ class AdminUserListView(APIView):
     )
     def get(self, request: Request) -> Response:
         """Return all users. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
         users = ListUsersUseCase(DjangoUserRepository()).execute()
         return success_response(UserResponseSerializer(users, many=True).data, request=request)
 
@@ -1137,7 +1218,7 @@ class AdminUserListView(APIView):
 class AdminUserSuspendView(APIView):
     """Superadmin: suspend a user account."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1152,8 +1233,6 @@ class AdminUserSuspendView(APIView):
     )
     def post(self, request: Request, user_id: uuid.UUID) -> Response:
         """Set is_active=False on the given user. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
         entity = SuspendUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
         return success_response(UserResponseSerializer(entity).data, request=request)
 
@@ -1161,7 +1240,7 @@ class AdminUserSuspendView(APIView):
 class AdminUserActivateView(APIView):
     """Superadmin: activate a suspended user account."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1176,8 +1255,6 @@ class AdminUserActivateView(APIView):
     )
     def post(self, request: Request, user_id: uuid.UUID) -> Response:
         """Set is_active=True on the given user. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
         entity = ActivateUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
         return success_response(UserResponseSerializer(entity).data, request=request)
 
@@ -1185,7 +1262,7 @@ class AdminUserActivateView(APIView):
 class AdminAuditLogView(APIView):
     """GET /admin/audit-log/ - list all platform audit events, staff only."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1198,14 +1275,6 @@ class AdminAuditLogView(APIView):
     )
     def get(self, request: Request) -> Response:
         """Return the most recent audit events. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(
-                code="ERR_FORBIDDEN",
-                message="Staff access required.",
-                http_status=403,
-                request=request,
-            )
-
         from apps.users.infrastructure.audit_models import AuditLog
         from apps.users.infrastructure.models import User as UserModel
 
@@ -1246,7 +1315,7 @@ class AdminAuditLogView(APIView):
 class AdminIAMAnalyticsView(APIView):
     """GET /admin/analytics/ - monthly user registration stats for the superadmin dashboard."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1256,9 +1325,6 @@ class AdminIAMAnalyticsView(APIView):
     )
     def get(self, request: Request) -> Response:
         """Return monthly user counts and 30D growth. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
-
         from datetime import datetime, timedelta, timezone
 
         from django.db.models import Count
@@ -1502,7 +1568,7 @@ class MFAEmailEnableView(APIView):
 class AdminFeatureFlagListView(APIView):
     """List all platform feature flags or create a new one."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1546,7 +1612,7 @@ class AdminFeatureFlagListView(APIView):
 class AdminFeatureFlagDetailView(APIView):
     """Update or delete a specific feature flag by key."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1592,7 +1658,7 @@ class AdminFeatureFlagDetailView(APIView):
 class AdminAnnouncementView(APIView):
     """List all announcements or create a new one."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],

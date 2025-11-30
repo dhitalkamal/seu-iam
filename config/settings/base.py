@@ -104,6 +104,14 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "apps.common.api.exceptions.api_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "password_reset": "3/hour",
+        "login": "20/hour",
+        "registration": "10/hour",
+    },
 }
 
 SIMPLE_JWT = {
@@ -120,7 +128,7 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
 MANAGEMENT_SERVICE_URL = config("MANAGEMENT_SERVICE_URL", default="http://management:8006")
-OTP_TTL_SECONDS = config("OTP_TTL_SECONDS", default=600, cast=int)
+OTP_TTL_SECONDS = config("OTP_TTL_SECONDS", default=3600, cast=int)
 
 GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
 GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET", default="")
