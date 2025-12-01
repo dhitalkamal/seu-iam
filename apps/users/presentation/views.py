@@ -1695,3 +1695,75 @@ class AdminAnnouncementView(APIView):
             scheduled_at=d["scheduled_at"],
         )
         return created_response(AnnouncementResponseSerializer(result).data, request=request)
+
+
+class GithubSocialAuthView(APIView):
+    """Sign in or register with a GitHub OAuth access token."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Social Auth"],
+        summary="Sign in with GitHub",
+        description=(
+            "Accepts a GitHub OAuth access token obtained after the user authorizes the app. "
+            "Verifies the token against the GitHub API, then either logs in the existing account "
+            "or creates a new one. Returns JWT tokens and a flag indicating whether a new account "
+            "was created."
+        ),
+        auth=[],
+        request=inline_serializer(
+            name="GithubSocialAuthRequest",
+            fields={"access_token": serializers.CharField(help_text="GitHub OAuth access token.")},
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Sign-in successful. JWT tokens issued.",
+                response=inline_serializer(
+                    name="GithubSocialAuthEnvelope",
+                    fields={
+                        "data": inline_serializer(
+                            name="GithubSocialAuthData",
+                            fields={
+                                "access_token": serializers.CharField(),
+                                "refresh_token": serializers.CharField(),
+                                "is_new_user": serializers.BooleanField(help_text="True if a new account was created during this sign-in."),
+                            },
+                        ),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            401: _R401,
+            403: _R403,
+            422: _R422,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify the GitHub access token and return JWT tokens."""
+        from apps.users.application.use_cases.github_social_auth import GithubSocialAuthUseCase
+        from apps.users.infrastructure.github_verifier import GithubTokenVerifier
+
+        token = request.data.get("access_token", "")
+        if not token:
+            return error_response("access_token is required.", status=400, request=request)
+
+        result = GithubSocialAuthUseCase(
+            DjangoUserRepository(),
+            GithubTokenVerifier(),
+            JWTTokenService(),
+        ).execute(access_token=token)
+
+        if result.refresh_token:
+            _create_session(request, result.refresh_token)
+
+        return success_response(
+            {
+                "access_token": result.access_token,
+                "refresh_token": result.refresh_token,
+                "is_new_user": result.is_new_user,
+            },
+            request=request,
+        )

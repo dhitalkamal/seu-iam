@@ -31,6 +31,7 @@ class UserEntity:
     mfa_type: str | None = None
     locked_until: datetime | None = None
     deleted_at: datetime | None = None
+    scheduled_deletion_at: datetime | None = None
 
     @property
     def full_name(self) -> str:

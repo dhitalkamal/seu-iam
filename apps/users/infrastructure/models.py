@@ -53,6 +53,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    scheduled_deletion_at = models.DateTimeField(null=True, blank=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -83,6 +84,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             bio=self.bio,
             locked_until=self.locked_until,
             deleted_at=self.deleted_at,
+            scheduled_deletion_at=self.scheduled_deletion_at,
         )
 
     @classmethod
@@ -106,7 +108,8 @@ class User(AbstractBaseUser, PermissionsMixin):
             failed_login_attempts=entity.failed_login_attempts,
             locked_until=entity.locked_until,
             deleted_at=entity.deleted_at,
+            scheduled_deletion_at=entity.scheduled_deletion_at,
         )
-        # password is pre-hashed — set directly to skip double-hashing
+        # password is pre-hashed; set directly to skip double-hashing
         obj.password = entity.password_hash
         return obj

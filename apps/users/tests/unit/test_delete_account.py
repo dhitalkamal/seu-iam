@@ -19,14 +19,14 @@ def test_delete_account_marks_user_inactive():
     assert repo.get_by_id(user.id).is_active is False
 
 
-def test_delete_account_sets_deleted_at():
-    """Deleted account has deleted_at populated."""
+def test_delete_account_sets_scheduled_deletion_at():
+    """Deletion schedules GDPR erasure via scheduled_deletion_at, not immediate deleted_at."""
     user = make_user()
     repo = FakeUserRepository([user])
 
     DeleteAccountUseCase(repo, FakeTokenBlacklistService()).execute(user_id=user.id)
 
-    assert repo.get_by_id(user.id).deleted_at is not None
+    assert repo.get_by_id(user.id).scheduled_deletion_at is not None
 
 
 def test_delete_account_blacklists_all_sessions():
