@@ -115,6 +115,21 @@ class IGoogleTokenVerifier(ABC):
         ...
 
 
+class IGithubTokenVerifier(ABC):
+    """Verifies a GitHub OAuth access token and returns the user profile payload."""
+
+    @abstractmethod
+    def verify(self, access_token: str) -> dict:
+        """
+        Exchange the access token for a user profile via the GitHub REST API.
+
+        Returns a dict with email, name, and avatar_url keys.
+        Raises SocialAuthError if the token is invalid or the account has no
+        verified primary email address.
+        """
+        ...
+
+
 class ITOTPService(ABC):
     """Generates and verifies TOTP secrets and codes."""
 
