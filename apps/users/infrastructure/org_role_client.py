@@ -27,9 +27,10 @@ class OrgRoleClient:
         """Lazy-load Redis client from Django cache backend."""
         if self._redis is not None:
             return self._redis
-        from django.core.cache import cache
+        import redis as redis_lib
+        from django.conf import settings
 
-        self._redis = cache.client.get_client()
+        self._redis = redis_lib.from_url(settings.REDIS_URL)
         return self._redis
 
     def get_org_roles(self, user_id: uuid.UUID) -> dict[str, str]:
