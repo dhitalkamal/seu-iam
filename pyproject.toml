@@ -11,9 +11,10 @@ dependencies = [
     "django-cors-headers",
     "python-decouple",
     "gunicorn",
+    "redis",
+    "pika",
     "pyotp",
     "qrcode",
-    "redis",
 ]
 
 [dependency-groups]
