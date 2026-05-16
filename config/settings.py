@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
+    "drf_spectacular",
     "apps.users",
 ]
 
@@ -94,9 +95,10 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
-    "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.StandardPagination",
+    "DEFAULT_PAGINATION_CLASS": "apps.common.api.pagination.StandardPagination",
     "PAGE_SIZE": 20,
-    "EXCEPTION_HANDLER": "apps.common.exceptions.api_exception_handler",
+    "EXCEPTION_HANDLER": "apps.common.api.exceptions.api_exception_handler",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 SIMPLE_JWT = {
@@ -121,4 +123,13 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": REDIS_URL,
     }
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": f"{SERVICE_NAME} API",
+    "DESCRIPTION": "Identity and Access Management service for the Sansaar platform.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": "/api/v1/",
 }
