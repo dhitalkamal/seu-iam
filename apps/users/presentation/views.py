@@ -157,6 +157,30 @@ def _audit(
     AuditService(DjangoAuditLogRepository()).log(request, user_id, event_type, metadata)
 
 
+def _notify_security(
+    request: Request,
+    event_type: str,
+    extra: dict | None = None,
+) -> None:
+    """Publish a security notification event via RabbitMQ, swallowing errors."""
+    try:
+        user = request.user  # type: ignore[attr-defined]
+        from apps.users.infrastructure.audit_service import _get_ip
+
+        RabbitMQEventPublisher().publish(
+            event_type,
+            {
+                "user_id": str(user.id),
+                "email": user.email,
+                "first_name": getattr(user, "first_name", ""),
+                "ip_address": _get_ip(request),
+                **(extra or {}),
+            },
+        )
+    except Exception:
+        pass
+
+
 def _create_session(request: Request, refresh_token: str) -> None:
     """Create a UserSession record for the issued refresh token, swallowing errors."""
     try:
@@ -350,10 +374,31 @@ class LoginView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        result = LoginUseCase(DjangoUserRepository(), JWTTokenService()).execute(
-            email=d["email"],
-            password=d["password"],
-        )
+        from apps.users.domain.exceptions import AccountLockedError
+
+        try:
+            result = LoginUseCase(DjangoUserRepository(), JWTTokenService()).execute(
+                email=d["email"],
+                password=d["password"],
+            )
+        except AccountLockedError as exc:
+            try:
+                from apps.users.infrastructure.audit_service import _get_ip
+
+                user = DjangoUserRepository().get_by_email(d["email"].lower().strip())
+                RabbitMQEventPublisher().publish(
+                    "iam.account_locked",
+                    {
+                        "user_id": str(user.id),
+                        "email": user.email,
+                        "first_name": user.first_name,
+                        "locked_until": exc.details["locked_until"] if exc.details else None,
+                        "ip_address": _get_ip(request),
+                    },
+                )
+            except Exception:
+                pass
+            raise
 
         if result.user_id:
             if result.mfa_required:
@@ -608,6 +653,7 @@ class ChangePasswordView(APIView):
             new_password=d["new_password"],
         )
         _audit(request, request.user.id, AuditEventType.PASSWORD_CHANGED)  # type: ignore[attr-defined]
+        _notify_security(request, "iam.password_changed")
         return success_response({"message": "Password changed successfully."}, request=request)
 
 
@@ -684,6 +730,7 @@ class MFAEnableView(APIView):
             code=ser.validated_data["code"],
         )
         _audit(request, request.user.id, AuditEventType.MFA_ENABLED)  # type: ignore[attr-defined]
+        _notify_security(request, "iam.mfa_enabled")
         return success_response(
             {"message": "MFA enabled successfully.", "backup_codes": result.backup_codes},
             request=request,
@@ -723,6 +770,7 @@ class MFADisableView(APIView):
             code=ser.validated_data["code"],
         )
         _audit(request, request.user.id, AuditEventType.MFA_DISABLED)  # type: ignore[attr-defined]
+        _notify_security(request, "iam.mfa_disabled")
         return success_response({"message": "MFA disabled successfully."}, request=request)
 
 
