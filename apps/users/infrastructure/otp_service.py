@@ -34,6 +34,14 @@ class RedisOTPService(IOTPService):
         _client().setex(self._key(user_id), settings.OTP_TTL_SECONDS, otp)
         return otp
 
+    def verify(self, user_id: uuid.UUID, otp: str) -> None:
+        """Validate the OTP without consuming it. Raises on expiry or mismatch."""
+        stored = _client().get(self._key(user_id))
+        if stored is None:
+            raise OTPExpiredError("OTP has expired or was never issued.")
+        if stored != otp:
+            raise OTPInvalidError("OTP does not match.")
+
     def verify_and_consume(self, user_id: uuid.UUID, otp: str) -> None:
         """Validate the OTP and delete it. Raises on expiry or mismatch."""
         client = _client()

@@ -125,6 +125,14 @@ class FakeOTPService(IOTPService):
         self._store[user_id] = self.FIXED_OTP
         return self.FIXED_OTP
 
+    def verify(self, user_id: uuid.UUID, otp: str) -> None:
+        """Validate without consuming. Raises on expiry or mismatch."""
+        stored = self._store.get(user_id)
+        if stored is None:
+            raise OTPExpiredError("OTP has expired or was never issued.")
+        if stored != otp:
+            raise OTPInvalidError("OTP does not match.")
+
     def verify_and_consume(self, user_id: uuid.UUID, otp: str) -> None:
         """Raise OTPExpiredError if no OTP exists, OTPInvalidError if it does not match."""
         stored = self._store.get(user_id)

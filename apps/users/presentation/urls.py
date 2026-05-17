@@ -32,6 +32,7 @@ from apps.users.presentation.views import (
     RequestPasswordResetView,
     ResendVerificationOTPView,
     VerifyEmailView,
+    VerifyPasswordResetOTPView,
 )
 
 urlpatterns: list[URLPattern] = [
@@ -44,6 +45,11 @@ urlpatterns: list[URLPattern] = [
     path("auth/email/verify/", VerifyEmailView.as_view(), name="auth-email-verify"),
     path("auth/email/resend/", ResendVerificationOTPView.as_view(), name="auth-email-resend"),
     path("auth/password/reset/", RequestPasswordResetView.as_view(), name="auth-password-reset"),
+    path(
+        "auth/password/reset/verify-otp/",
+        VerifyPasswordResetOTPView.as_view(),
+        name="auth-password-reset-verify-otp",
+    ),
     path(
         "auth/password/reset/confirm/",
         ConfirmPasswordResetView.as_view(),

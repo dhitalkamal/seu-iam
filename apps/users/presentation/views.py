@@ -566,6 +566,52 @@ class RequestPasswordResetView(APIView):
         return success_response({"message": "Password reset OTP sent."}, request=request)
 
 
+class VerifyPasswordResetOTPView(APIView):
+    """Verify a password-reset OTP is valid without consuming it (step 2 of 3-page reset flow)."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Verify password-reset OTP",
+        description=(
+            "Validates the OTP without consuming it. "
+            "Call this on page 2 of the reset flow to confirm the code before showing the "
+            "new-password form. The OTP is only consumed when POST /auth/password/reset/confirm/ is called."
+        ),
+        auth=[],
+        request=inline_serializer(
+            name="VerifyPasswordResetOTPRequest",
+            fields={
+                "email": serializers.EmailField(),
+                "otp": serializers.CharField(min_length=8, max_length=8),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(description="OTP is valid.", response=_MSG_ENVELOPE),
+            400: _R400,
+            404: _R404,
+            422: _R422,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Check the OTP without deleting it."""
+        from apps.users.application.use_cases.verify_password_reset_otp import (
+            VerifyPasswordResetOTPUseCase,
+        )
+        from apps.users.presentation.serializers import VerifyPasswordResetOTPSerializer
+
+        ser = VerifyPasswordResetOTPSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        VerifyPasswordResetOTPUseCase(
+            DjangoUserRepository(), RedisOTPService("password_reset")
+        ).execute(email=d["email"], otp=d["otp"])
+        return success_response({"message": "OTP is valid."}, request=request)
+
+
 class ConfirmPasswordResetView(APIView):
     """Reset the password using the OTP received by email."""
 
