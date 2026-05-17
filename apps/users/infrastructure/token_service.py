@@ -32,3 +32,14 @@ class JWTTokenBlacklistService(ITokenBlacklistService):
             RefreshToken(refresh_token).blacklist()
         except TokenError as exc:
             raise InvalidTokenError(str(exc)) from exc
+
+    def blacklist_all_for_user(self, user_id: uuid.UUID) -> None:
+        """Blacklist every outstanding refresh token for the given user."""
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken,
+            OutstandingToken,
+        )
+
+        tokens = OutstandingToken.objects.filter(user_id=user_id)
+        for token in tokens:
+            BlacklistedToken.objects.get_or_create(token=token)

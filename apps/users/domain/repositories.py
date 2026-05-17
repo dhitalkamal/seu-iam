@@ -40,6 +40,11 @@ class ITokenBlacklistService(ABC):
     @abstractmethod
     def blacklist(self, refresh_token: str) -> None: ...
 
+    @abstractmethod
+    def blacklist_all_for_user(self, user_id: uuid.UUID) -> None:
+        """Blacklist every outstanding refresh token for the given user."""
+        ...
+
 
 class IOTPService(ABC):
     """Generates, stores, and verifies short-lived one-time passwords."""

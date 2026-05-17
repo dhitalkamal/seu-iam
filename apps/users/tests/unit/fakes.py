@@ -102,6 +102,11 @@ class FakeTokenBlacklistService(ITokenBlacklistService):
             raise InvalidTokenError("Token is invalid or already blacklisted.")
         self.blacklisted.add(refresh_token)
 
+    def blacklist_all_for_user(self, user_id: uuid.UUID) -> None:
+        """Record that all tokens for this user were invalidated."""
+        self.invalidated_users: set[uuid.UUID] = getattr(self, "invalidated_users", set())
+        self.invalidated_users.add(user_id)
+
 
 class FakeOTPService(IOTPService):
     """Stores OTPs in memory. Returns a fixed OTP for deterministic tests."""
