@@ -133,3 +133,15 @@ class MFAChallengeSerializer(serializers.Serializer):
 
     user_id = serializers.UUIDField()
     code = serializers.CharField(min_length=6, max_length=6)
+
+
+class InternalUserSerializer(serializers.Serializer):
+    """Safe user fields exposed for service-to-service lookups. No sensitive data."""
+
+    id = serializers.UUIDField()
+    email = serializers.EmailField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    full_name = serializers.CharField()
+    avatar_url = serializers.URLField(allow_null=True)
+    is_active = serializers.BooleanField()

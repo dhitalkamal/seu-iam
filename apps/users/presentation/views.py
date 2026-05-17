@@ -784,3 +784,76 @@ class ProfileView(APIView):
             avatar_url=d.get("avatar_url"),
         )
         return success_response(UserResponseSerializer(entity).data, request=request)
+
+    @extend_schema(
+        tags=["Profile"],
+        summary="Delete my account",
+        description=(
+            "Permanently deactivates the authenticated user's account. "
+            "The account is soft-deleted: is_active is set to false and deleted_at is recorded. "
+            "All existing sessions are immediately invalidated."
+        ),
+        responses={
+            204: OpenApiResponse(description="Account deleted successfully. No response body."),
+            401: _R401,
+            404: _R404,
+        },
+    )
+    def delete(self, request: Request) -> Response:
+        """Soft-delete the account and blacklist all sessions."""
+        from apps.users.application.use_cases.delete_account import DeleteAccountUseCase
+
+        DeleteAccountUseCase(DjangoUserRepository(), JWTTokenBlacklistService()).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+        )
+        return Response(status=204)
+
+
+class InternalUserView(APIView):
+    """Service-to-service endpoint for resolving user details by ID."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Internal"],
+        summary="Get user by ID (internal)",
+        description=(
+            "Returns safe user fields for service-to-service lookups. "
+            "No sensitive data (password, MFA secret, lock state) is included. "
+            "This endpoint trusts the internal network — restrict it at the gateway in production."
+        ),
+        auth=[],
+        responses={
+            200: OpenApiResponse(
+                description="User details.",
+                response=inline_serializer(
+                    name="InternalUserEnvelope",
+                    fields={
+                        "data": inline_serializer(
+                            name="InternalUserData",
+                            fields={
+                                "id": serializers.UUIDField(),
+                                "email": serializers.EmailField(),
+                                "first_name": serializers.CharField(),
+                                "last_name": serializers.CharField(),
+                                "full_name": serializers.CharField(),
+                                "avatar_url": serializers.URLField(allow_null=True),
+                                "is_active": serializers.BooleanField(),
+                            },
+                        ),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            404: _R404,
+        },
+    )
+    def get(self, request: Request, user_id: uuid.UUID) -> Response:
+        """Return safe user fields for the given user ID."""
+        from apps.users.application.use_cases.profile import GetProfileUseCase
+        from apps.users.presentation.serializers import InternalUserSerializer
+
+        entity = GetProfileUseCase(DjangoUserRepository()).execute(user_id=user_id)
+        return success_response(InternalUserSerializer(entity).data, request=request)
