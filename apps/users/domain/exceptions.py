@@ -73,3 +73,24 @@ class OTPInvalidError(DomainError):
 
     http_status = 400
     code = "ERR_AUTH_OTP_INVALID"
+
+
+class MFAAlreadyEnabledError(DomainError):
+    """MFA is already enabled on this account."""
+
+    http_status = 409
+    code = "ERR_AUTH_MFA_ALREADY_ENABLED"
+
+
+class MFANotEnabledError(DomainError):
+    """MFA is not enabled on this account."""
+
+    http_status = 409
+    code = "ERR_AUTH_MFA_NOT_ENABLED"
+
+
+class InvalidTOTPError(DomainError):
+    """The TOTP code is incorrect or has expired."""
+
+    http_status = 400
+    code = "ERR_AUTH_INVALID_TOTP"

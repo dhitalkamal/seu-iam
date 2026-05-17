@@ -113,3 +113,23 @@ class UserResponseSerializer(serializers.Serializer):
     is_email_verified = serializers.BooleanField()
     mfa_enabled = serializers.BooleanField()
     date_joined = serializers.DateTimeField()
+
+
+class MFASetupResponseSerializer(serializers.Serializer):
+    """Response returned after initiating MFA setup."""
+
+    secret = serializers.CharField()
+    provisioning_uri = serializers.CharField()
+
+
+class MFACodeSerializer(serializers.Serializer):
+    """Payload carrying a 6-digit TOTP code."""
+
+    code = serializers.CharField(min_length=6, max_length=6)
+
+
+class MFAChallengeSerializer(serializers.Serializer):
+    """Payload for completing an MFA login challenge."""
+
+    user_id = serializers.UUIDField()
+    code = serializers.CharField(min_length=6, max_length=6)
