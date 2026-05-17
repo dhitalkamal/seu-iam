@@ -129,16 +129,45 @@ class MFACodeSerializer(serializers.Serializer):
 
 
 class MFAChallengeSerializer(serializers.Serializer):
-    """Payload for completing an MFA login challenge."""
+    """Payload for completing an MFA login challenge (TOTP code or 8-char backup code)."""
 
     user_id = serializers.UUIDField()
-    code = serializers.CharField(min_length=6, max_length=6)
+    code = serializers.CharField(
+        min_length=6,
+        max_length=8,
+        help_text="6-digit TOTP code or 8-character backup code.",
+    )
 
 
 class GoogleSocialAuthSerializer(serializers.Serializer):
     """Payload for Google social sign-in."""
 
     id_token = serializers.CharField(write_only=True)
+
+
+class MFAEnableResponseSerializer(serializers.Serializer):
+    """Response after enabling MFA, includes one-time backup codes."""
+
+    message = serializers.CharField()
+    backup_codes = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="One-time backup codes. Store these securely — they are shown only once.",
+    )
+
+
+class RegenerateBackupCodesResponseSerializer(serializers.Serializer):
+    """Response after regenerating backup codes."""
+
+    backup_codes = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="New one-time backup codes. Previous codes are now invalid.",
+    )
+
+
+class BackupCodeStatusSerializer(serializers.Serializer):
+    """Status of a user's backup codes — count only, no plaintext."""
+
+    remaining = serializers.IntegerField(help_text="Number of unused backup codes remaining.")
 
 
 class SessionInfoSerializer(serializers.Serializer):
