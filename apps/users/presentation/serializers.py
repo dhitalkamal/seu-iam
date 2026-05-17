@@ -51,6 +51,13 @@ class VerifyEmailRequestSerializer(serializers.Serializer):
     otp = serializers.CharField(min_length=8, max_length=8)
 
 
+class VerifyPasswordResetOTPSerializer(serializers.Serializer):
+    """Payload for verifying a password-reset OTP without consuming it."""
+
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=8, max_length=8)
+
+
 class ResendVerificationOTPRequestSerializer(serializers.Serializer):
     """Payload for requesting a new verification OTP."""
 

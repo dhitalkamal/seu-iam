@@ -55,6 +55,16 @@ class IOTPService(ABC):
         ...
 
     @abstractmethod
+    def verify(self, user_id: uuid.UUID, otp: str) -> None:
+        """
+        Validate the OTP without consuming it.
+
+        Raises OTPExpiredError if no OTP exists, OTPInvalidError if it does not match.
+        Does NOT delete the OTP — use this to verify before presenting the password form.
+        """
+        ...
+
+    @abstractmethod
     def verify_and_consume(self, user_id: uuid.UUID, otp: str) -> None:
         """
         Validate the OTP for the given user.
