@@ -46,6 +46,61 @@ from apps.users.presentation.serializers import (
     VerifyEmailRequestSerializer,
 )
 
+# shared schema building blocks
+_META = inline_serializer(
+    name="ResponseMeta",
+    fields={
+        "request_id": serializers.CharField(),
+        "timestamp": serializers.CharField(),
+    },
+)
+
+_ERROR_ENVELOPE = inline_serializer(
+    name="ErrorEnvelope",
+    fields={
+        "data": serializers.JSONField(allow_null=True, default=None),
+        "error": inline_serializer(
+            name="ErrorEnvelopeBody",
+            fields={
+                "code": serializers.CharField(help_text="Machine-readable error code."),
+                "message": serializers.CharField(help_text="Human-readable error description."),
+                "details": serializers.JSONField(
+                    allow_null=True,
+                    help_text="Extra context: flat list of {field, message} for validation errors, dict for domain errors.",
+                ),
+            },
+        ),
+        "meta": _META,
+    },
+)
+
+_MSG_ENVELOPE = inline_serializer(
+    name="MessageEnvelope",
+    fields={
+        "data": inline_serializer(
+            name="MessageEnvelopeData",
+            fields={"message": serializers.CharField()},
+        ),
+        "error": serializers.JSONField(allow_null=True, default=None),
+        "meta": _META,
+    },
+)
+
+_TOKEN_PAIR_ENVELOPE = inline_serializer(
+    name="TokenPairEnvelope",
+    fields={
+        "data": inline_serializer(
+            name="TokenPairData",
+            fields={
+                "access_token": serializers.CharField(),
+                "refresh_token": serializers.CharField(),
+            },
+        ),
+        "error": serializers.JSONField(allow_null=True, default=None),
+        "meta": _META,
+    },
+)
+
 _CHECKS = inline_serializer(
     name="DependencyChecks",
     fields={
@@ -54,12 +109,39 @@ _CHECKS = inline_serializer(
         "rabbitmq": serializers.ChoiceField(choices=["healthy", "unhealthy"]),
     },
 )
-_META = inline_serializer(
-    name="ResponseMeta",
-    fields={
-        "request_id": serializers.CharField(),
-        "timestamp": serializers.CharField(),
-    },
+
+# reusable per-status OpenApiResponse objects
+_R400 = OpenApiResponse(
+    description="Request contains invalid data (e.g. wrong or expired OTP).",
+    response=_ERROR_ENVELOPE,
+)
+_R401 = OpenApiResponse(
+    description="Authentication credentials are missing or invalid.",
+    response=_ERROR_ENVELOPE,
+)
+_R403 = OpenApiResponse(
+    description="You do not have permission to perform this action.",
+    response=_ERROR_ENVELOPE,
+)
+_R404 = OpenApiResponse(
+    description="The requested resource was not found.",
+    response=_ERROR_ENVELOPE,
+)
+_R409 = OpenApiResponse(
+    description="Request conflicts with the current resource state.",
+    response=_ERROR_ENVELOPE,
+)
+_R422 = OpenApiResponse(
+    description="Payload failed validation. details contains a flat list of {field, message} objects.",
+    response=_ERROR_ENVELOPE,
+)
+_R423 = OpenApiResponse(
+    description="Account is temporarily locked. details.locked_until contains the unlock timestamp.",
+    response=_ERROR_ENVELOPE,
+)
+_R503 = OpenApiResponse(
+    description="One or more dependencies are unavailable.",
+    response=_ERROR_ENVELOPE,
 )
 
 
@@ -81,10 +163,10 @@ class HealthCheckView(APIView):
             200: OpenApiResponse(
                 description="All dependencies are healthy.",
                 response=inline_serializer(
-                    name="HealthyResponse",
+                    name="HealthSuccessEnvelope",
                     fields={
                         "data": inline_serializer(
-                            name="HealthyData",
+                            name="HealthData",
                             fields={
                                 "service": serializers.CharField(),
                                 "status": serializers.CharField(),
@@ -92,12 +174,12 @@ class HealthCheckView(APIView):
                                 "checks": _CHECKS,
                             },
                         ),
-                        "error": serializers.JSONField(allow_null=True),
+                        "error": serializers.JSONField(allow_null=True, default=None),
                         "meta": _META,
                     },
                 ),
             ),
-            503: OpenApiResponse(description="One or more dependencies are unavailable."),
+            503: _R503,
         },
     )
     def get(self, request: Request) -> Response:
@@ -147,15 +229,25 @@ class RegisterView(APIView):
         tags=["Auth"],
         summary="Register a new account",
         description=(
-            "Creates an unverified user account and sends a verification OTP to the email. "
-            "Returns 409 if the email is already taken, 422 if the payload fails validation."
+            "Creates an unverified user account and sends a verification OTP to the email address. "
+            "The account cannot log in until the email is verified."
         ),
         auth=[],
         request=RegisterRequestSerializer,
         responses={
-            201: OpenApiResponse(description="Account created.", response=UserResponseSerializer),
-            409: OpenApiResponse(description="Email already in use."),
-            422: OpenApiResponse(description="Validation error."),
+            201: OpenApiResponse(
+                description="Account created. A verification OTP has been sent to the email.",
+                response=inline_serializer(
+                    name="RegisterSuccessEnvelope",
+                    fields={
+                        "data": UserResponseSerializer(),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            409: _R409,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -187,33 +279,43 @@ class LoginView(APIView):
         description=(
             "Authenticate with email and password. "
             "Returns JWT tokens on success. "
-            "If MFA is enabled returns mfa_required=true with a user_id. "
-            "Submit that user_id and a TOTP code to the MFA challenge endpoint to get tokens."
+            "When MFA is enabled, returns mfa_required=true and user_id instead of tokens — "
+            "complete login via POST /auth/mfa/challenge/."
         ),
         auth=[],
         request=LoginRequestSerializer,
         responses={
             200: OpenApiResponse(
-                description="Tokens issued or MFA challenge required.",
+                description="Tokens issued, or MFA challenge required.",
                 response=inline_serializer(
-                    name="LoginResponse",
+                    name="LoginSuccessEnvelope",
                     fields={
                         "data": inline_serializer(
                             name="LoginData",
                             fields={
                                 "mfa_required": serializers.BooleanField(),
-                                "user_id": serializers.UUIDField(allow_null=True),
-                                "access_token": serializers.CharField(allow_null=True),
-                                "refresh_token": serializers.CharField(allow_null=True),
+                                "user_id": serializers.UUIDField(
+                                    allow_null=True,
+                                    help_text="Populated only when mfa_required is true.",
+                                ),
+                                "access_token": serializers.CharField(
+                                    allow_null=True,
+                                    help_text="Populated only when mfa_required is false.",
+                                ),
+                                "refresh_token": serializers.CharField(
+                                    allow_null=True,
+                                    help_text="Populated only when mfa_required is false.",
+                                ),
                             },
                         ),
-                        "error": serializers.JSONField(allow_null=True),
+                        "error": serializers.JSONField(allow_null=True, default=None),
                         "meta": _META,
                     },
                 ),
             ),
-            401: OpenApiResponse(description="Invalid credentials or unverified account."),
-            423: OpenApiResponse(description="Account locked due to too many failed attempts."),
+            401: _R401,
+            403: _R403,
+            423: _R423,
         },
     )
     def post(self, request: Request) -> Response:
@@ -248,8 +350,13 @@ class LogoutView(APIView):
         description="Blacklists the provided refresh token server-side so it cannot be reused.",
         request=LogoutRequestSerializer,
         responses={
-            200: OpenApiResponse(description="Session terminated successfully."),
-            400: OpenApiResponse(description="Token is invalid or already blacklisted."),
+            200: OpenApiResponse(
+                description="Session terminated successfully.",
+                response=_MSG_ENVELOPE,
+            ),
+            400: _R400,
+            401: _R401,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -271,16 +378,20 @@ class VerifyEmailView(APIView):
         tags=["Auth"],
         summary="Verify email with OTP",
         description=(
-            "Submit the 8-character OTP that was emailed on registration. "
-            "Returns 400 if the OTP is wrong or expired, 409 if already verified."
+            "Submit the 8-character alphanumeric OTP that was emailed on registration. "
+            "OTPs expire after 10 minutes. Use POST /auth/email/resend/ to get a fresh one."
         ),
         auth=[],
         request=VerifyEmailRequestSerializer,
         responses={
-            200: OpenApiResponse(description="Email verified successfully."),
-            400: OpenApiResponse(description="OTP invalid or expired."),
-            404: OpenApiResponse(description="Email not found."),
-            409: OpenApiResponse(description="Email already verified."),
+            200: OpenApiResponse(
+                description="Email verified successfully.",
+                response=_MSG_ENVELOPE,
+            ),
+            400: _R400,
+            404: _R404,
+            409: _R409,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -297,7 +408,7 @@ class VerifyEmailView(APIView):
 
 
 class ResendVerificationOTPView(APIView):
-    """Send a fresh OTP to the given email address."""
+    """Send a fresh email verification OTP."""
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
@@ -306,15 +417,19 @@ class ResendVerificationOTPView(APIView):
         tags=["Auth"],
         summary="Resend verification OTP",
         description=(
-            "Generates a new OTP and sends it to the email. "
-            "Returns 409 if the email is already verified, 404 if the email is unknown."
+            "Generates a new 8-character OTP and sends it to the email address. "
+            "Any previously issued OTP is overwritten."
         ),
         auth=[],
         request=ResendVerificationOTPRequestSerializer,
         responses={
-            200: OpenApiResponse(description="OTP resent successfully."),
-            404: OpenApiResponse(description="Email not found."),
-            409: OpenApiResponse(description="Email already verified."),
+            200: OpenApiResponse(
+                description="Verification OTP sent to the email address.",
+                response=_MSG_ENVELOPE,
+            ),
+            404: _R404,
+            409: _R409,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -338,15 +453,20 @@ class RequestPasswordResetView(APIView):
         tags=["Auth"],
         summary="Request password reset",
         description=(
-            "Generates a password-reset OTP and sends it to the email. "
-            "Returns 401 if the email is not yet verified, 404 if the email is unknown."
+            "Sends a password-reset OTP to the email address. "
+            "The account email must be verified before a reset can be requested. "
+            "OTPs expire after 10 minutes."
         ),
         auth=[],
         request=RequestPasswordResetSerializer,
         responses={
-            200: OpenApiResponse(description="Password reset OTP sent."),
-            401: OpenApiResponse(description="Email not verified."),
-            404: OpenApiResponse(description="Email not found."),
+            200: OpenApiResponse(
+                description="Password reset OTP sent to the email address.",
+                response=_MSG_ENVELOPE,
+            ),
+            401: _R401,
+            404: _R404,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -371,15 +491,19 @@ class ConfirmPasswordResetView(APIView):
         summary="Confirm password reset",
         description=(
             "Submit the OTP and a new password to complete the reset. "
-            "All existing sessions are invalidated on success."
+            "All existing sessions are invalidated on success. "
+            "The new password must meet the minimum security requirements."
         ),
         auth=[],
         request=ConfirmPasswordResetSerializer,
         responses={
-            200: OpenApiResponse(description="Password reset successfully."),
-            400: OpenApiResponse(description="OTP invalid or expired."),
-            404: OpenApiResponse(description="Email not found."),
-            422: OpenApiResponse(description="Validation error."),
+            200: OpenApiResponse(
+                description="Password reset successfully. All sessions have been invalidated.",
+                response=_MSG_ENVELOPE,
+            ),
+            400: _R400,
+            404: _R404,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -413,9 +537,12 @@ class ChangePasswordView(APIView):
         ),
         request=ChangePasswordSerializer,
         responses={
-            200: OpenApiResponse(description="Password changed successfully."),
-            401: OpenApiResponse(description="Current password is incorrect."),
-            422: OpenApiResponse(description="Validation error."),
+            200: OpenApiResponse(
+                description="Password changed successfully. All sessions have been invalidated.",
+                response=_MSG_ENVELOPE,
+            ),
+            401: _R401,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -433,7 +560,7 @@ class ChangePasswordView(APIView):
 
 
 class MFASetupView(APIView):
-    """Generate a TOTP secret and provisioning URI to configure an authenticator app."""
+    """Generate a TOTP secret and provisioning URI for authenticator app setup."""
 
     permission_classes = [IsAuthenticated]
 
@@ -441,12 +568,25 @@ class MFASetupView(APIView):
         tags=["MFA"],
         summary="Initiate MFA setup",
         description=(
-            "Generates a TOTP secret and provisioning URI. "
-            "Scan the URI with an authenticator app then call the enable endpoint to activate MFA."
+            "Generates a TOTP secret and provisioning URI (otpauth:// URL). "
+            "Scan the URI with an authenticator app (e.g. Google Authenticator, Authy), "
+            "then confirm setup by calling POST /auth/mfa/enable/ with a valid code. "
+            "MFA is not active until the enable step is completed."
         ),
         responses={
-            200: OpenApiResponse(description="Setup data.", response=MFASetupResponseSerializer),
-            409: OpenApiResponse(description="MFA already enabled."),
+            200: OpenApiResponse(
+                description="TOTP secret and provisioning URI for authenticator app setup.",
+                response=inline_serializer(
+                    name="MFASetupEnvelope",
+                    fields={
+                        "data": MFASetupResponseSerializer(),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            401: _R401,
+            409: _R409,
         },
     )
     def post(self, request: Request) -> Response:
@@ -465,12 +605,20 @@ class MFAEnableView(APIView):
     @extend_schema(
         tags=["MFA"],
         summary="Enable MFA",
-        description="Submit a valid TOTP code to activate MFA on the account.",
+        description=(
+            "Submit a valid 6-digit TOTP code from the authenticator app to activate MFA. "
+            "Must be called after POST /auth/mfa/setup/ and before MFA is enforced on login."
+        ),
         request=MFACodeSerializer,
         responses={
-            200: OpenApiResponse(description="MFA enabled."),
-            400: OpenApiResponse(description="Invalid TOTP code."),
-            409: OpenApiResponse(description="MFA already enabled."),
+            200: OpenApiResponse(
+                description="MFA enabled successfully.",
+                response=_MSG_ENVELOPE,
+            ),
+            400: _R400,
+            401: _R401,
+            409: _R409,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -493,12 +641,20 @@ class MFADisableView(APIView):
     @extend_schema(
         tags=["MFA"],
         summary="Disable MFA",
-        description="Submit a valid TOTP code to deactivate MFA and clear the stored secret.",
+        description=(
+            "Submit a valid 6-digit TOTP code to deactivate MFA and clear the stored secret. "
+            "After this, login returns tokens directly without an MFA challenge."
+        ),
         request=MFACodeSerializer,
         responses={
-            200: OpenApiResponse(description="MFA disabled."),
-            400: OpenApiResponse(description="Invalid TOTP code."),
-            409: OpenApiResponse(description="MFA not enabled."),
+            200: OpenApiResponse(
+                description="MFA disabled successfully. Secret cleared.",
+                response=_MSG_ENVELOPE,
+            ),
+            400: _R400,
+            401: _R401,
+            409: _R409,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -514,24 +670,30 @@ class MFADisableView(APIView):
 
 
 class MFAChallengeView(APIView):
-    """Complete an MFA login by verifying a TOTP code and issuing tokens."""
+    """Complete an MFA login by verifying a TOTP code and issuing JWT tokens."""
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["MFA"],
-        summary="MFA challenge",
+        summary="MFA login challenge",
         description=(
-            "Submit the user_id (from the login response) and a TOTP code. "
+            "Submit the user_id returned by POST /auth/login/ (when mfa_required=true) "
+            "together with the current 6-digit TOTP code from the authenticator app. "
             "Returns JWT tokens on success."
         ),
         auth=[],
         request=MFAChallengeSerializer,
         responses={
-            200: OpenApiResponse(description="Tokens issued."),
-            400: OpenApiResponse(description="Invalid TOTP code."),
-            401: OpenApiResponse(description="MFA not enabled for this user."),
+            200: OpenApiResponse(
+                description="TOTP verified. JWT tokens issued.",
+                response=_TOKEN_PAIR_ENVELOPE,
+            ),
+            400: _R400,
+            401: _R401,
+            404: _R404,
+            422: _R422,
         },
     )
     def post(self, request: Request) -> Response:
@@ -560,8 +722,21 @@ class ProfileView(APIView):
     @extend_schema(
         tags=["Profile"],
         summary="Get my profile",
+        description="Returns the full profile of the currently authenticated user.",
         responses={
-            200: OpenApiResponse(description="User profile.", response=UserResponseSerializer),
+            200: OpenApiResponse(
+                description="User profile.",
+                response=inline_serializer(
+                    name="ProfileGetEnvelope",
+                    fields={
+                        "data": UserResponseSerializer(),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            401: _R401,
+            404: _R404,
         },
     )
     def get(self, request: Request) -> Response:
@@ -574,10 +749,26 @@ class ProfileView(APIView):
     @extend_schema(
         tags=["Profile"],
         summary="Update my profile",
+        description=(
+            "Partially update the authenticated user's profile. "
+            "Only provided fields are changed. Omitted fields retain their current values."
+        ),
         request=UpdateProfileRequestSerializer,
         responses={
-            200: OpenApiResponse(description="Updated profile.", response=UserResponseSerializer),
-            422: OpenApiResponse(description="Validation error."),
+            200: OpenApiResponse(
+                description="Updated profile.",
+                response=inline_serializer(
+                    name="ProfilePatchEnvelope",
+                    fields={
+                        "data": UserResponseSerializer(),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            401: _R401,
+            404: _R404,
+            422: _R422,
         },
     )
     def patch(self, request: Request) -> Response:
