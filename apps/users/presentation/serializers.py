@@ -57,6 +57,28 @@ class ResendVerificationOTPRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
+class RequestPasswordResetSerializer(serializers.Serializer):
+    """Payload for requesting a password reset OTP."""
+
+    email = serializers.EmailField()
+
+
+class ConfirmPasswordResetSerializer(serializers.Serializer):
+    """Payload for confirming a password reset with OTP and new password."""
+
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=8, max_length=8)
+    new_password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    confirm_password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+
+    def validate(self, attrs: dict) -> dict:
+        """Ensure the two password fields match."""
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        attrs.pop("confirm_password")
+        return attrs
+
+
 class UpdateProfileRequestSerializer(serializers.Serializer):
     """Partial payload for updating the authenticated user's profile."""
 

@@ -12,10 +12,12 @@ from rest_framework.views import APIView
 
 from apps.common.api.responses import created_response, error_response, success_response
 from apps.common.health import check_database, check_rabbitmq, check_redis
+from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
 from apps.users.application.use_cases.profile import GetProfileUseCase, UpdateProfileUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
+from apps.users.application.use_cases.request_password_reset import RequestPasswordResetUseCase
 from apps.users.application.use_cases.resend_verification_otp import ResendVerificationOTPUseCase
 from apps.users.application.use_cases.verify_email import VerifyEmailUseCase
 from apps.users.infrastructure.event_publisher import RabbitMQEventPublisher
@@ -23,9 +25,11 @@ from apps.users.infrastructure.otp_service import RedisOTPService
 from apps.users.infrastructure.repositories import DjangoUserRepository
 from apps.users.infrastructure.token_service import JWTTokenBlacklistService, JWTTokenService
 from apps.users.presentation.serializers import (
+    ConfirmPasswordResetSerializer,
     LoginRequestSerializer,
     LogoutRequestSerializer,
     RegisterRequestSerializer,
+    RequestPasswordResetSerializer,
     ResendVerificationOTPRequestSerializer,
     UpdateProfileRequestSerializer,
     UserResponseSerializer,
@@ -312,6 +316,76 @@ class ResendVerificationOTPView(APIView):
             DjangoUserRepository(), RedisOTPService(), RabbitMQEventPublisher()
         ).execute(email=ser.validated_data["email"])
         return success_response({"message": "Verification OTP sent."}, request=request)
+
+
+class RequestPasswordResetView(APIView):
+    """Send a password-reset OTP to the given email address."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Request password reset",
+        description=(
+            "Generates a password-reset OTP and sends it to the email. "
+            "Returns 401 if the email is not yet verified, 404 if the email is unknown."
+        ),
+        auth=[],
+        request=RequestPasswordResetSerializer,
+        responses={
+            200: OpenApiResponse(description="Password reset OTP sent."),
+            401: OpenApiResponse(description="Email not verified."),
+            404: OpenApiResponse(description="Email not found."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Generate and publish a password-reset OTP."""
+        ser = RequestPasswordResetSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        RequestPasswordResetUseCase(
+            DjangoUserRepository(), RedisOTPService("password_reset"), RabbitMQEventPublisher()
+        ).execute(email=ser.validated_data["email"])
+        return success_response({"message": "Password reset OTP sent."}, request=request)
+
+
+class ConfirmPasswordResetView(APIView):
+    """Reset the password using the OTP received by email."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Confirm password reset",
+        description=(
+            "Submit the OTP and a new password to complete the reset. "
+            "All existing sessions are invalidated on success."
+        ),
+        auth=[],
+        request=ConfirmPasswordResetSerializer,
+        responses={
+            200: OpenApiResponse(description="Password reset successfully."),
+            400: OpenApiResponse(description="OTP invalid or expired."),
+            404: OpenApiResponse(description="Email not found."),
+            422: OpenApiResponse(description="Validation error."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Validate OTP, update password, and invalidate all sessions."""
+        ser = ConfirmPasswordResetSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        ConfirmPasswordResetUseCase(
+            DjangoUserRepository(), RedisOTPService("password_reset"), JWTTokenBlacklistService()
+        ).execute(
+            email=d["email"],
+            otp=d["otp"],
+            new_password=d["new_password"],
+        )
+        return success_response({"message": "Password reset successfully."}, request=request)
 
 
 class ProfileView(APIView):
