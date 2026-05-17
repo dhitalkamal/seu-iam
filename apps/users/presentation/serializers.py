@@ -135,6 +135,12 @@ class MFAChallengeSerializer(serializers.Serializer):
     code = serializers.CharField(min_length=6, max_length=6)
 
 
+class GoogleSocialAuthSerializer(serializers.Serializer):
+    """Payload for Google social sign-in."""
+
+    id_token = serializers.CharField(write_only=True)
+
+
 class InternalUserSerializer(serializers.Serializer):
     """Safe user fields exposed for service-to-service lookups. No sensitive data."""
 

@@ -82,6 +82,13 @@ class OTPInvalidError(DomainError):
     code = "ERR_AUTH_OTP_INVALID"
 
 
+class SocialAuthError(DomainError):
+    """The social identity token is invalid, expired, or untrusted."""
+
+    http_status = 401
+    code = "ERR_AUTH_SOCIAL_INVALID_TOKEN"
+
+
 class MFAAlreadyEnabledError(DomainError):
     """MFA is already enabled on this account."""
 

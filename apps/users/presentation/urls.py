@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     ChangePasswordView,
     ConfirmPasswordResetView,
+    GoogleSocialAuthView,
     HealthCheckView,
     InternalUserView,
     LoginView,
@@ -42,6 +43,7 @@ urlpatterns: list[URLPattern] = [
     path("auth/mfa/enable/", MFAEnableView.as_view(), name="auth-mfa-enable"),
     path("auth/mfa/disable/", MFADisableView.as_view(), name="auth-mfa-disable"),
     path("auth/mfa/challenge/", MFAChallengeView.as_view(), name="auth-mfa-challenge"),
+    path("auth/social/google/", GoogleSocialAuthView.as_view(), name="auth-social-google"),
     path("profile/me/", ProfileView.as_view(), name="profile-me"),
     path("internal/users/<uuid:user_id>/", InternalUserView.as_view(), name="internal-user"),
 ]
