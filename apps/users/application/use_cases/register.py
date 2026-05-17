@@ -11,18 +11,25 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 from apps.users.domain.entities import UserEntity
 from apps.users.domain.exceptions import UserAlreadyExistsError
-from apps.users.domain.repositories import IUserRepository
+from apps.users.domain.repositories import IEventPublisher, IOTPService, IUserRepository
 
 
 class RegisterUseCase:
-    """Create a new unverified user account."""
+    """Create a new unverified user account and dispatch an email verification OTP."""
 
-    def __init__(self, user_repo: IUserRepository) -> None:
+    def __init__(
+        self,
+        user_repo: IUserRepository,
+        otp_service: IOTPService,
+        event_publisher: IEventPublisher,
+    ) -> None:
         self._users = user_repo
+        self._otp = otp_service
+        self._publisher = event_publisher
 
     def execute(self, email: str, password: str, first_name: str, last_name: str) -> UserEntity:
         """
-        Validate uniqueness, hash the password, and persist the account.
+        Validate uniqueness, hash the password, persist the account, then send a verification OTP.
 
         @param email - login email address
         @param password - plaintext password validated against Django validators
@@ -57,4 +64,17 @@ class RegisterUseCase:
             date_joined=now,
             updated_at=now,
         )
-        return self._users.create(entity)
+        user = self._users.create(entity)
+
+        otp = self._otp.generate_and_store(user.id)
+        self._publisher.publish(
+            "iam.email_verification_requested",
+            {
+                "user_id": str(user.id),
+                "email": user.email,
+                "first_name": user.first_name,
+                "otp": otp,
+            },
+        )
+
+        return user

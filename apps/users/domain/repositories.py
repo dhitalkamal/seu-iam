@@ -39,3 +39,31 @@ class ITokenBlacklistService(ABC):
 
     @abstractmethod
     def blacklist(self, refresh_token: str) -> None: ...
+
+
+class IOTPService(ABC):
+    """Generates, stores, and verifies short-lived one-time passwords."""
+
+    @abstractmethod
+    def generate_and_store(self, user_id: uuid.UUID) -> str:
+        """Generate an 8-char alphanumeric OTP, persist it with a TTL, and return it."""
+        ...
+
+    @abstractmethod
+    def verify_and_consume(self, user_id: uuid.UUID, otp: str) -> None:
+        """
+        Validate the OTP for the given user.
+
+        Deletes it on success so it cannot be reused.
+        Raises OTPExpiredError if no OTP exists, OTPInvalidError if it does not match.
+        """
+        ...
+
+
+class IEventPublisher(ABC):
+    """Publishes domain events to a message broker."""
+
+    @abstractmethod
+    def publish(self, event_name: str, payload: dict) -> None:
+        """Publish a named event with an arbitrary JSON-serialisable payload."""
+        ...
