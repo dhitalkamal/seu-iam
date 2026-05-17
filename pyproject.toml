@@ -16,6 +16,8 @@ dependencies = [
     "drf-spectacular",
     "pyotp",
     "qrcode",
+    "google-auth>=2.53.0",
+    "requests>=2.34.2",
 ]
 
 [dependency-groups]

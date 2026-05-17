@@ -10,10 +10,12 @@ from apps.users.domain.exceptions import (
     InvalidTokenError,
     OTPExpiredError,
     OTPInvalidError,
+    SocialAuthError,
     UserNotFoundError,
 )
 from apps.users.domain.repositories import (
     IEventPublisher,
+    IGoogleTokenVerifier,
     IOTPService,
     ITokenBlacklistService,
     ITokenService,
@@ -160,3 +162,24 @@ class FakeTOTPService(ITOTPService):
     def verify_code(self, secret: str, code: str) -> bool:
         """Accept only the sentinel VALID_CODE; reject everything else."""
         return secret == self.FIXED_SECRET and code == self.VALID_CODE
+
+
+class FakeGoogleTokenVerifier(IGoogleTokenVerifier):
+    """Returns a fixed payload for the sentinel token; raises SocialAuthError for anything else."""
+
+    VALID_TOKEN = "valid-google-token"
+    PAYLOAD = {
+        "email": "google.user@gmail.com",
+        "given_name": "Google",
+        "family_name": "User",
+        "picture": "https://lh3.googleusercontent.com/photo.jpg",
+        "email_verified": True,
+    }
+
+    def verify(self, id_token: str) -> dict:
+        """Return the fixed payload or raise SocialAuthError on the bad-token sentinel."""
+        if id_token == "bad-token":
+            raise SocialAuthError("Invalid Google ID token.")
+        if id_token != self.VALID_TOKEN:
+            raise SocialAuthError("Invalid Google ID token.")
+        return self.PAYLOAD

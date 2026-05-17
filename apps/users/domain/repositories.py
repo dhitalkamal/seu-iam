@@ -74,6 +74,20 @@ class IEventPublisher(ABC):
         ...
 
 
+class IGoogleTokenVerifier(ABC):
+    """Verifies a Google ID token and returns the decoded payload."""
+
+    @abstractmethod
+    def verify(self, id_token: str) -> dict:
+        """
+        Verify the token against Google's public keys and return the payload.
+
+        Raises SocialAuthError if the token is invalid, expired, or the
+        audience does not match.
+        """
+        ...
+
+
 class ITOTPService(ABC):
     """Generates and verifies TOTP secrets and codes."""
 

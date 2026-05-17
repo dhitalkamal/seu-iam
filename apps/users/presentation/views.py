@@ -857,3 +857,75 @@ class InternalUserView(APIView):
 
         entity = GetProfileUseCase(DjangoUserRepository()).execute(user_id=user_id)
         return success_response(InternalUserSerializer(entity).data, request=request)
+
+
+class GoogleSocialAuthView(APIView):
+    """Sign in or register with a Google ID token."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Social Auth"],
+        summary="Sign in with Google",
+        description=(
+            "Accepts a Google ID token obtained from Google's client-side SDK "
+            "(e.g. @react-oauth/google). "
+            "Verifies the token, then either logs in the existing account or creates a new one. "
+            "Existing accounts registered with email/password are automatically linked by email. "
+            "Returns JWT tokens and a flag indicating whether a new account was created."
+        ),
+        auth=[],
+        request=inline_serializer(
+            name="GoogleSocialAuthRequest",
+            fields={
+                "id_token": serializers.CharField(help_text="Google ID token from the client SDK.")
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Sign-in successful. JWT tokens issued.",
+                response=inline_serializer(
+                    name="GoogleSocialAuthEnvelope",
+                    fields={
+                        "data": inline_serializer(
+                            name="GoogleSocialAuthData",
+                            fields={
+                                "access_token": serializers.CharField(),
+                                "refresh_token": serializers.CharField(),
+                                "is_new_user": serializers.BooleanField(
+                                    help_text="True if a new account was created during this sign-in."
+                                ),
+                            },
+                        ),
+                        "error": serializers.JSONField(allow_null=True, default=None),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            401: _R401,
+            403: _R403,
+            422: _R422,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify the Google ID token and return JWT tokens."""
+        from apps.users.application.use_cases.google_social_auth import GoogleSocialAuthUseCase
+        from apps.users.infrastructure.google_verifier import GoogleTokenVerifier
+        from apps.users.presentation.serializers import GoogleSocialAuthSerializer
+
+        ser = GoogleSocialAuthSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        result = GoogleSocialAuthUseCase(
+            DjangoUserRepository(), GoogleTokenVerifier(), JWTTokenService()
+        ).execute(id_token=ser.validated_data["id_token"])
+
+        return success_response(
+            {
+                "access_token": result.access_token,
+                "refresh_token": result.refresh_token,
+                "is_new_user": result.is_new_user,
+            },
+            request=request,
+        )
