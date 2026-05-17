@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 
 from apps.users.domain.entities import UserEntity
@@ -18,3 +19,13 @@ class IUserRepository(ABC):
 
     @abstractmethod
     def create(self, entity: UserEntity) -> UserEntity: ...
+
+    @abstractmethod
+    def update(self, entity: UserEntity) -> UserEntity: ...
+
+
+class ITokenService(ABC):
+    """Issues JWT access + refresh token pairs for a given user."""
+
+    @abstractmethod
+    def generate_for_user(self, user_id: uuid.UUID) -> tuple[str, str]: ...

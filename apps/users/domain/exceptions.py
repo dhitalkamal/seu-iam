@@ -17,3 +17,31 @@ class UserNotFoundError(DomainError):
 
     http_status = 404
     code = "ERR_AUTH_USER_NOT_FOUND"
+
+
+class InvalidCredentialsError(DomainError):
+    """Email and password combination is incorrect."""
+
+    http_status = 401
+    code = "ERR_AUTH_INVALID_CREDENTIALS"
+
+
+class AccountNotVerifiedError(DomainError):
+    """The account email has not been verified yet."""
+
+    http_status = 401
+    code = "ERR_AUTH_ACCOUNT_NOT_VERIFIED"
+
+
+class AccountInactiveError(DomainError):
+    """The account has been deactivated."""
+
+    http_status = 403
+    code = "ERR_AUTH_ACCOUNT_INACTIVE"
+
+
+class AccountLockedError(DomainError):
+    """Too many failed login attempts. Account is temporarily locked."""
+
+    http_status = 423
+    code = "ERR_AUTH_ACCOUNT_LOCKED"

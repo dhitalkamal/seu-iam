@@ -1,4 +1,4 @@
-"""Unit tests for user registration -- no database, hand-rolled fakes."""
+"""Unit tests for user registration. no database, hand-rolled fakes."""
 
 from __future__ import annotations
 

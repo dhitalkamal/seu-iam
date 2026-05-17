@@ -12,9 +12,15 @@ from rest_framework.views import APIView
 
 from apps.common.api.responses import created_response, error_response, success_response
 from apps.common.health import check_database, check_rabbitmq, check_redis
+from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.infrastructure.repositories import DjangoUserRepository
-from apps.users.presentation.serializers import RegisterRequestSerializer, UserResponseSerializer
+from apps.users.infrastructure.token_service import JWTTokenService
+from apps.users.presentation.serializers import (
+    LoginRequestSerializer,
+    RegisterRequestSerializer,
+    UserResponseSerializer,
+)
 
 _CHECKS = inline_serializer(
     name="DependencyChecks",
@@ -141,3 +147,65 @@ class RegisterView(APIView):
             last_name=d["last_name"],
         )
         return created_response(UserResponseSerializer(entity).data, request=request)
+
+
+class LoginView(APIView):
+    """Authenticate with email and password."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Log in",
+        description=(
+            "Authenticate with email and password. "
+            "Returns JWT tokens on success. "
+            "If MFA is enabled, returns mfa_required=true with a user_id — "
+            "submit that user_id and a TOTP code to the MFA challenge endpoint to get tokens."
+        ),
+        auth=[],
+        request=LoginRequestSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Tokens issued or MFA challenge required.",
+                response=inline_serializer(
+                    name="LoginResponse",
+                    fields={
+                        "data": inline_serializer(
+                            name="LoginData",
+                            fields={
+                                "mfa_required": serializers.BooleanField(),
+                                "user_id": serializers.UUIDField(allow_null=True),
+                                "access_token": serializers.CharField(allow_null=True),
+                                "refresh_token": serializers.CharField(allow_null=True),
+                            },
+                        ),
+                        "error": serializers.JSONField(allow_null=True),
+                        "meta": _META,
+                    },
+                ),
+            ),
+            401: OpenApiResponse(description="Invalid credentials or unverified account."),
+            423: OpenApiResponse(description="Account locked due to too many failed attempts."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Validate credentials and return tokens or an MFA challenge signal."""
+        ser = LoginRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        result = LoginUseCase(DjangoUserRepository(), JWTTokenService()).execute(
+            email=d["email"],
+            password=d["password"],
+        )
+        return success_response(
+            {
+                "mfa_required": result.mfa_required,
+                "user_id": str(result.user_id) if result.user_id else None,
+                "access_token": result.access_token,
+                "refresh_token": result.refresh_token,
+            },
+            request=request,
+        )

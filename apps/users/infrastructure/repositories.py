@@ -27,3 +27,19 @@ class DjangoUserRepository(IUserRepository):
         obj = User.from_entity(entity)
         obj.save(using="default")
         return obj.to_entity()
+
+    def update(self, entity: UserEntity) -> UserEntity:
+        """Update mutable fields on an existing user."""
+        User.objects.filter(pk=entity.id).update(
+            first_name=entity.first_name,
+            last_name=entity.last_name,
+            avatar_url=entity.avatar_url,
+            is_email_verified=entity.is_email_verified,
+            is_active=entity.is_active,
+            mfa_enabled=entity.mfa_enabled,
+            failed_login_attempts=entity.failed_login_attempts,
+            locked_until=entity.locked_until,
+            deleted_at=entity.deleted_at,
+            password=entity.password_hash,
+        )
+        return entity

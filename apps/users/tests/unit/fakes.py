@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from apps.users.domain.entities import UserEntity
 from apps.users.domain.exceptions import UserNotFoundError
-from apps.users.domain.repositories import IUserRepository
+from apps.users.domain.repositories import ITokenService, IUserRepository
 
 
 def _now() -> datetime:
@@ -57,3 +57,16 @@ class FakeUserRepository(IUserRepository):
         """Persist the entity and return it."""
         self._store[entity.id] = entity
         return entity
+
+    def update(self, entity: UserEntity) -> UserEntity:
+        """Persist updated fields and return the entity."""
+        self._store[entity.id] = entity
+        return entity
+
+
+class FakeTokenService(ITokenService):
+    """Returns predictable fake token strings for unit tests."""
+
+    def generate_for_user(self, user_id: uuid.UUID) -> tuple[str, str]:
+        """Return deterministic fake tokens keyed on the user ID."""
+        return f"access-{user_id}", f"refresh-{user_id}"

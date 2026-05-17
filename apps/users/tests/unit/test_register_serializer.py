@@ -1,4 +1,4 @@
-"""Unit tests for RegisterRequestSerializer -- validates confirm_password logic."""
+"""Unit tests for RegisterRequestSerializer. validates confirm_password logic."""
 
 from __future__ import annotations
 

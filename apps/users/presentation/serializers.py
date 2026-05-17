@@ -22,6 +22,22 @@ class RegisterRequestSerializer(serializers.Serializer):
         return attrs
 
 
+class LoginRequestSerializer(serializers.Serializer):
+    """Payload for authenticating with email and password."""
+
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    """Login outcome: tokens for a normal login, or an MFA challenge signal."""
+
+    mfa_required = serializers.BooleanField()
+    user_id = serializers.UUIDField(allow_null=True)
+    access_token = serializers.CharField(allow_null=True)
+    refresh_token = serializers.CharField(allow_null=True)
+
+
 class UserResponseSerializer(serializers.Serializer):
     """Public profile shape returned after registration and on profile reads."""
 
