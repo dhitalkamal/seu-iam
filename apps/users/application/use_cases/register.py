@@ -41,7 +41,22 @@ class RegisterUseCase:
         """
         email = email.lower().strip()
 
+        # ! If the account exists but is unverified, treat this as a resend rather
+        # than a duplicate — the user simply missed or let their previous OTP expire.
         if self._users.exists_by_email(email):
+            existing = self._users.get_by_email(email)
+            if not existing.is_email_verified:
+                otp = self._otp.generate_and_store(existing.id)
+                self._publisher.publish(
+                    "iam.email_verification_requested",
+                    {
+                        "user_id": str(existing.id),
+                        "email": existing.email,
+                        "first_name": existing.first_name,
+                        "otp": otp,
+                    },
+                )
+                return existing
             raise UserAlreadyExistsError("An account with this email already exists.")
 
         try:

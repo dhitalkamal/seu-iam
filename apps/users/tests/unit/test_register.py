@@ -49,12 +49,39 @@ def test_register_email_is_lowercased_and_trimmed():
     assert user.email == "upper@example.com"
 
 
-def test_register_duplicate_email_raises():
-    """Registering with an already-taken email raises UserAlreadyExistsError."""
-    repo = FakeUserRepository([make_user(email="taken@example.com")])
+def test_register_duplicate_verified_email_raises():
+    """Registering with a verified email raises UserAlreadyExistsError."""
+    repo = FakeUserRepository([make_user(email="taken@example.com", is_email_verified=True)])
 
     with pytest.raises(UserAlreadyExistsError):
         _uc(repo).execute("taken@example.com", "StrongPass1!", "A", "B")
+
+
+def test_register_unverified_email_resends_otp():
+    """Re-registering with an unverified email resends the OTP and returns the existing user."""
+    existing = make_user(email="stuck@example.com", is_email_verified=False)
+    repo = FakeUserRepository([existing])
+    publisher = FakeEventPublisher()
+
+    result = RegisterUseCase(repo, FakeOTPService(), publisher).execute(
+        "stuck@example.com", "StrongPass1!", "A", "B"
+    )
+
+    assert result.id == existing.id
+    assert len(publisher.events) == 1
+    event_name, payload = publisher.events[0]
+    assert event_name == "iam.email_verification_requested"
+    assert payload["email"] == existing.email
+
+
+def test_register_unverified_email_does_not_create_duplicate():
+    """Re-registering with an unverified email must not add a second record to the repo."""
+    existing = make_user(email="stuck@example.com", is_email_verified=False)
+    repo = FakeUserRepository([existing])
+
+    _uc(repo).execute("stuck@example.com", "StrongPass1!", "A", "B")
+
+    assert len(repo._store) == 1
 
 
 def test_register_persists_user_in_repository():
