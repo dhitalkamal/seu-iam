@@ -81,3 +81,30 @@ def test_update_profile_persists_to_repository():
     UpdateProfileUseCase(repo).execute(user.id, first_name="Saved")
 
     assert repo.get_by_email(user.email).first_name == "Saved"
+
+
+def test_update_profile_changes_phone():
+    """UpdateProfileUseCase stores a phone number."""
+    user = make_user()
+    repo = FakeUserRepository([user])
+
+    updated = UpdateProfileUseCase(repo).execute(user.id, phone="+977-9801234567")
+
+    assert updated.phone == "+977-9801234567"
+
+
+def test_update_profile_changes_bio():
+    """UpdateProfileUseCase stores a bio."""
+    user = make_user()
+    repo = FakeUserRepository([user])
+
+    updated = UpdateProfileUseCase(repo).execute(user.id, bio="Event organiser from Kathmandu.")
+
+    assert updated.bio == "Event organiser from Kathmandu."
+
+
+def test_update_profile_phone_and_bio_default_none():
+    """New users have phone=None and bio=None by default."""
+    user = make_user()
+    assert user.phone is None
+    assert user.bio is None

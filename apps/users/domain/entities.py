@@ -25,6 +25,8 @@ class UserEntity:
     date_joined: datetime
     updated_at: datetime
     avatar_url: str | None = None
+    phone: str | None = None
+    bio: str | None = None
     mfa_secret: str | None = None
     locked_until: datetime | None = None
     deleted_at: datetime | None = None

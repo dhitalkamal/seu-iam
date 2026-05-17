@@ -41,6 +41,8 @@ class DjangoUserRepository(IUserRepository):
             first_name=entity.first_name,
             last_name=entity.last_name,
             avatar_url=entity.avatar_url,
+            phone=entity.phone,
+            bio=entity.bio,
             is_email_verified=entity.is_email_verified,
             is_active=entity.is_active,
             mfa_enabled=entity.mfa_enabled,

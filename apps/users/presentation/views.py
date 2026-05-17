@@ -945,6 +945,8 @@ class ProfileView(APIView):
             first_name=d.get("first_name"),
             last_name=d.get("last_name"),
             avatar_url=d.get("avatar_url"),
+            phone=d.get("phone"),
+            bio=d.get("bio"),
         )
         _audit(request, request.user.id, AuditEventType.PROFILE_UPDATED, {"fields": list(d.keys())})  # type: ignore[attr-defined]
         return success_response(UserResponseSerializer(entity).data, request=request)

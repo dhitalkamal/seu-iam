@@ -42,6 +42,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
     avatar_url = models.URLField(blank=True, null=True)
+    phone = models.CharField(max_length=32, blank=True, null=True)
+    bio = models.TextField(blank=True, null=True)
     is_email_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -75,6 +77,8 @@ class User(AbstractBaseUser, PermissionsMixin):
             date_joined=self.date_joined,
             updated_at=self.updated_at,
             avatar_url=self.avatar_url,
+            phone=self.phone,
+            bio=self.bio,
             locked_until=self.locked_until,
             deleted_at=self.deleted_at,
         )
@@ -88,6 +92,8 @@ class User(AbstractBaseUser, PermissionsMixin):
             first_name=entity.first_name,
             last_name=entity.last_name,
             avatar_url=entity.avatar_url,
+            phone=entity.phone,
+            bio=entity.bio,
             is_email_verified=entity.is_email_verified,
             is_active=entity.is_active,
             is_staff=entity.is_staff,

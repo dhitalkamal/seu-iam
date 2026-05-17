@@ -107,6 +107,8 @@ class UpdateProfileRequestSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150, required=False)
     last_name = serializers.CharField(max_length=150, required=False)
     avatar_url = serializers.URLField(allow_null=True, required=False)
+    phone = serializers.CharField(max_length=32, allow_null=True, required=False)
+    bio = serializers.CharField(max_length=500, allow_null=True, required=False)
 
 
 class UserResponseSerializer(serializers.Serializer):
@@ -117,6 +119,8 @@ class UserResponseSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     last_name = serializers.CharField()
     avatar_url = serializers.URLField(allow_null=True)
+    phone = serializers.CharField(allow_null=True)
+    bio = serializers.CharField(allow_null=True)
     is_email_verified = serializers.BooleanField()
     mfa_enabled = serializers.BooleanField()
     date_joined = serializers.DateTimeField()

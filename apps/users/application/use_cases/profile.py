@@ -37,6 +37,8 @@ class UpdateProfileUseCase:
         first_name: str | None = None,
         last_name: str | None = None,
         avatar_url: str | None = None,
+        phone: str | None = None,
+        bio: str | None = None,
     ) -> UserEntity:
         """
         Update only the fields that are explicitly provided.
@@ -45,6 +47,8 @@ class UpdateProfileUseCase:
         @param first_name - new given name, if changing
         @param last_name - new family name, if changing
         @param avatar_url - new avatar URL, if changing
+        @param phone - contact phone number, if changing
+        @param bio - short profile bio, if changing
         @returns the updated UserEntity
         """
         user = self._users.get_by_id(user_id)
@@ -54,4 +58,8 @@ class UpdateProfileUseCase:
             user.last_name = last_name.strip()
         if avatar_url is not None:
             user.avatar_url = avatar_url
+        if phone is not None:
+            user.phone = phone.strip()
+        if bio is not None:
+            user.bio = bio.strip()
         return self._users.update(user)
