@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from apps.common.api.responses import created_response, error_response, success_response
 from apps.common.health import check_database, check_rabbitmq, check_redis
+from apps.users.application.use_cases.change_password import ChangePasswordUseCase
 from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
@@ -25,6 +26,7 @@ from apps.users.infrastructure.otp_service import RedisOTPService
 from apps.users.infrastructure.repositories import DjangoUserRepository
 from apps.users.infrastructure.token_service import JWTTokenBlacklistService, JWTTokenService
 from apps.users.presentation.serializers import (
+    ChangePasswordSerializer,
     ConfirmPasswordResetSerializer,
     LoginRequestSerializer,
     LogoutRequestSerializer,
@@ -386,6 +388,40 @@ class ConfirmPasswordResetView(APIView):
             new_password=d["new_password"],
         )
         return success_response({"message": "Password reset successfully."}, request=request)
+
+
+class ChangePasswordView(APIView):
+    """Change the authenticated user's own password."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Change password",
+        description=(
+            "Change the authenticated user's password. "
+            "Requires the current password for verification. "
+            "All existing sessions are invalidated on success."
+        ),
+        request=ChangePasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Password changed successfully."),
+            401: OpenApiResponse(description="Current password is incorrect."),
+            422: OpenApiResponse(description="Validation error."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify current password, set new one, and blacklist all sessions."""
+        ser = ChangePasswordSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        ChangePasswordUseCase(DjangoUserRepository(), JWTTokenBlacklistService()).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+            current_password=d["current_password"],
+            new_password=d["new_password"],
+        )
+        return success_response({"message": "Password changed successfully."}, request=request)
 
 
 class ProfileView(APIView):

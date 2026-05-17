@@ -6,6 +6,7 @@ from django.urls import URLPattern, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
+    ChangePasswordView,
     ConfirmPasswordResetView,
     HealthCheckView,
     LoginView,
@@ -31,5 +32,6 @@ urlpatterns: list[URLPattern] = [
         ConfirmPasswordResetView.as_view(),
         name="auth-password-reset-confirm",
     ),
+    path("auth/password/change/", ChangePasswordView.as_view(), name="auth-password-change"),
     path("profile/me/", ProfileView.as_view(), name="profile-me"),
 ]
