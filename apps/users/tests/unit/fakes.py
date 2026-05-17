@@ -6,8 +6,15 @@ import uuid
 from datetime import datetime, timezone
 
 from apps.users.domain.entities import UserEntity
-from apps.users.domain.exceptions import InvalidTokenError, UserNotFoundError
+from apps.users.domain.exceptions import (
+    InvalidTokenError,
+    OTPExpiredError,
+    OTPInvalidError,
+    UserNotFoundError,
+)
 from apps.users.domain.repositories import (
+    IEventPublisher,
+    IOTPService,
     ITokenBlacklistService,
     ITokenService,
     IUserRepository,
@@ -94,3 +101,37 @@ class FakeTokenBlacklistService(ITokenBlacklistService):
         if refresh_token == "invalid-token":
             raise InvalidTokenError("Token is invalid or already blacklisted.")
         self.blacklisted.add(refresh_token)
+
+
+class FakeOTPService(IOTPService):
+    """Stores OTPs in memory. Returns a fixed OTP for deterministic tests."""
+
+    FIXED_OTP = "ABCD1234"
+
+    def __init__(self) -> None:
+        self._store: dict[uuid.UUID, str] = {}
+
+    def generate_and_store(self, user_id: uuid.UUID) -> str:
+        """Store the fixed OTP for the user and return it."""
+        self._store[user_id] = self.FIXED_OTP
+        return self.FIXED_OTP
+
+    def verify_and_consume(self, user_id: uuid.UUID, otp: str) -> None:
+        """Raise OTPExpiredError if no OTP exists, OTPInvalidError if it does not match."""
+        stored = self._store.get(user_id)
+        if stored is None:
+            raise OTPExpiredError("OTP has expired or was never issued.")
+        if stored != otp:
+            raise OTPInvalidError("OTP does not match.")
+        del self._store[user_id]
+
+
+class FakeEventPublisher(IEventPublisher):
+    """Records published events for assertion in tests."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    def publish(self, event_name: str, payload: dict) -> None:
+        """Append the event and payload to the recorded list."""
+        self.events.append((event_name, payload))

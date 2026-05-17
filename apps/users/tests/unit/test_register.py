@@ -6,13 +6,23 @@ import pytest
 
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.domain.exceptions import UserAlreadyExistsError
-from apps.users.tests.unit.fakes import FakeUserRepository, make_user
+from apps.users.tests.unit.fakes import (
+    FakeEventPublisher,
+    FakeOTPService,
+    FakeUserRepository,
+    make_user,
+)
+
+
+def _uc(repo: FakeUserRepository) -> RegisterUseCase:
+    """Build a RegisterUseCase with stock fakes."""
+    return RegisterUseCase(repo, FakeOTPService(), FakeEventPublisher())
 
 
 def test_register_returns_user_with_correct_fields():
     """Registered user has the submitted email, names, and unverified status."""
     repo = FakeUserRepository()
-    user = RegisterUseCase(repo).execute("kamal@example.com", "StrongPass1!", "Kamal", "Dhital")
+    user = _uc(repo).execute("kamal@example.com", "StrongPass1!", "Kamal", "Dhital")
 
     assert user.email == "kamal@example.com"
     assert user.first_name == "Kamal"
@@ -25,7 +35,7 @@ def test_register_returns_user_with_correct_fields():
 def test_register_password_is_hashed():
     """The stored password_hash must never equal the plaintext password."""
     repo = FakeUserRepository()
-    user = RegisterUseCase(repo).execute("a@b.com", "StrongPass1!", "A", "B")
+    user = _uc(repo).execute("a@b.com", "StrongPass1!", "A", "B")
 
     assert user.password_hash != "StrongPass1!"
     assert user.password_hash.startswith("pbkdf2_")
@@ -34,7 +44,7 @@ def test_register_password_is_hashed():
 def test_register_email_is_lowercased_and_trimmed():
     """Emails are normalised to lowercase with whitespace stripped."""
     repo = FakeUserRepository()
-    user = RegisterUseCase(repo).execute("  UPPER@Example.COM  ", "StrongPass1!", "X", "Y")
+    user = _uc(repo).execute("  UPPER@Example.COM  ", "StrongPass1!", "X", "Y")
 
     assert user.email == "upper@example.com"
 
@@ -44,13 +54,39 @@ def test_register_duplicate_email_raises():
     repo = FakeUserRepository([make_user(email="taken@example.com")])
 
     with pytest.raises(UserAlreadyExistsError):
-        RegisterUseCase(repo).execute("taken@example.com", "StrongPass1!", "A", "B")
+        _uc(repo).execute("taken@example.com", "StrongPass1!", "A", "B")
 
 
 def test_register_persists_user_in_repository():
     """The returned user is actually stored and retrievable from the repo."""
     repo = FakeUserRepository()
-    user = RegisterUseCase(repo).execute("stored@example.com", "StrongPass1!", "S", "T")
+    user = _uc(repo).execute("stored@example.com", "StrongPass1!", "S", "T")
 
     found = repo.get_by_email("stored@example.com")
     assert found.id == user.id
+
+
+def test_register_publishes_email_verification_event():
+    """Registration fires an email_verification_requested event with email and OTP."""
+    repo = FakeUserRepository()
+    publisher = FakeEventPublisher()
+    user = RegisterUseCase(repo, FakeOTPService(), publisher).execute(
+        "pub@example.com", "StrongPass1!", "P", "Q"
+    )
+
+    assert len(publisher.events) == 1
+    event_name, payload = publisher.events[0]
+    assert event_name == "iam.email_verification_requested"
+    assert payload["email"] == user.email
+    assert payload["otp"] == FakeOTPService.FIXED_OTP
+
+
+def test_register_generates_and_stores_otp():
+    """An OTP is generated for the new user and stored in the OTP service."""
+    repo = FakeUserRepository()
+    otp_svc = FakeOTPService()
+    user = RegisterUseCase(repo, otp_svc, FakeEventPublisher()).execute(
+        "otp@example.com", "StrongPass1!", "O", "P"
+    )
+
+    assert user.id in otp_svc._store  # type: ignore[attr-defined]

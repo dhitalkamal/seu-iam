@@ -52,3 +52,24 @@ class InvalidTokenError(DomainError):
 
     http_status = 400
     code = "ERR_AUTH_INVALID_TOKEN"
+
+
+class EmailAlreadyVerifiedError(DomainError):
+    """The user's email address is already verified."""
+
+    http_status = 409
+    code = "ERR_AUTH_EMAIL_ALREADY_VERIFIED"
+
+
+class OTPExpiredError(DomainError):
+    """The OTP has expired or was never issued."""
+
+    http_status = 400
+    code = "ERR_AUTH_OTP_EXPIRED"
+
+
+class OTPInvalidError(DomainError):
+    """The OTP does not match."""
+
+    http_status = 400
+    code = "ERR_AUTH_OTP_INVALID"

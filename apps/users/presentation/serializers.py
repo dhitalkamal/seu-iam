@@ -44,6 +44,19 @@ class LogoutRequestSerializer(serializers.Serializer):
     refresh_token = serializers.CharField()
 
 
+class VerifyEmailRequestSerializer(serializers.Serializer):
+    """Payload for verifying an email address with an OTP."""
+
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=8, max_length=8)
+
+
+class ResendVerificationOTPRequestSerializer(serializers.Serializer):
+    """Payload for requesting a new verification OTP."""
+
+    email = serializers.EmailField()
+
+
 class UpdateProfileRequestSerializer(serializers.Serializer):
     """Partial payload for updating the authenticated user's profile."""
 

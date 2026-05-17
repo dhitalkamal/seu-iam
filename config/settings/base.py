@@ -123,6 +123,7 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
 
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
+OTP_TTL_SECONDS = config("OTP_TTL_SECONDS", default=600, cast=int)
 
 CACHES = {
     "default": {

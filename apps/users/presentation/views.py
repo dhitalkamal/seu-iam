@@ -16,14 +16,20 @@ from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
 from apps.users.application.use_cases.profile import GetProfileUseCase, UpdateProfileUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
+from apps.users.application.use_cases.resend_verification_otp import ResendVerificationOTPUseCase
+from apps.users.application.use_cases.verify_email import VerifyEmailUseCase
+from apps.users.infrastructure.event_publisher import RabbitMQEventPublisher
+from apps.users.infrastructure.otp_service import RedisOTPService
 from apps.users.infrastructure.repositories import DjangoUserRepository
 from apps.users.infrastructure.token_service import JWTTokenBlacklistService, JWTTokenService
 from apps.users.presentation.serializers import (
     LoginRequestSerializer,
     LogoutRequestSerializer,
     RegisterRequestSerializer,
+    ResendVerificationOTPRequestSerializer,
     UpdateProfileRequestSerializer,
     UserResponseSerializer,
+    VerifyEmailRequestSerializer,
 )
 
 _CHECKS = inline_serializer(
@@ -118,7 +124,7 @@ class HealthCheckView(APIView):
 
 
 class RegisterView(APIView):
-    """Create a new unverified user account."""
+    """Create a new unverified user account and dispatch an email verification OTP."""
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
@@ -127,7 +133,7 @@ class RegisterView(APIView):
         tags=["Auth"],
         summary="Register a new account",
         description=(
-            "Creates an unverified user account. "
+            "Creates an unverified user account and sends a verification OTP to the email. "
             "Returns 409 if the email is already taken, 422 if the payload fails validation."
         ),
         auth=[],
@@ -139,12 +145,14 @@ class RegisterView(APIView):
         },
     )
     def post(self, request: Request) -> Response:
-        """Validate the payload, hash the password, and persist the account."""
+        """Validate the payload, hash the password, persist the account, and send OTP."""
         ser = RegisterRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        entity = RegisterUseCase(DjangoUserRepository()).execute(
+        entity = RegisterUseCase(
+            DjangoUserRepository(), RedisOTPService(), RabbitMQEventPublisher()
+        ).execute(
             email=d["email"],
             password=d["password"],
             first_name=d["first_name"],
@@ -237,6 +245,73 @@ class LogoutView(APIView):
 
         LogoutUseCase(JWTTokenBlacklistService()).execute(ser.validated_data["refresh_token"])
         return success_response({"message": "Logged out successfully."}, request=request)
+
+
+class VerifyEmailView(APIView):
+    """Verify a user's email address with the OTP sent on registration."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Verify email with OTP",
+        description=(
+            "Submit the 8-character OTP that was emailed on registration. "
+            "Returns 400 if the OTP is wrong or expired, 409 if already verified."
+        ),
+        auth=[],
+        request=VerifyEmailRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Email verified successfully."),
+            400: OpenApiResponse(description="OTP invalid or expired."),
+            404: OpenApiResponse(description="Email not found."),
+            409: OpenApiResponse(description="Email already verified."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Validate the OTP and mark the account as verified."""
+        ser = VerifyEmailRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        VerifyEmailUseCase(DjangoUserRepository(), RedisOTPService()).execute(
+            email=d["email"],
+            otp=d["otp"],
+        )
+        return success_response({"message": "Email verified successfully."}, request=request)
+
+
+class ResendVerificationOTPView(APIView):
+    """Send a fresh OTP to the given email address."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Resend verification OTP",
+        description=(
+            "Generates a new OTP and sends it to the email. "
+            "Returns 409 if the email is already verified, 404 if the email is unknown."
+        ),
+        auth=[],
+        request=ResendVerificationOTPRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="OTP resent successfully."),
+            404: OpenApiResponse(description="Email not found."),
+            409: OpenApiResponse(description="Email already verified."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Generate a new OTP and publish the verification event."""
+        ser = ResendVerificationOTPRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        ResendVerificationOTPUseCase(
+            DjangoUserRepository(), RedisOTPService(), RabbitMQEventPublisher()
+        ).execute(email=ser.validated_data["email"])
+        return success_response({"message": "Verification OTP sent."}, request=request)
 
 
 class ProfileView(APIView):
