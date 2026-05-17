@@ -141,6 +141,22 @@ class GoogleSocialAuthSerializer(serializers.Serializer):
     id_token = serializers.CharField(write_only=True)
 
 
+class SessionInfoSerializer(serializers.Serializer):
+    """Active session detail returned by the session list endpoint."""
+
+    jti = serializers.UUIDField()
+    ip_address = serializers.IPAddressField(allow_null=True)
+    user_agent = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    last_seen_at = serializers.DateTimeField()
+
+
+class GDPRErasureSerializer(serializers.Serializer):
+    """Payload for requesting account erasure."""
+
+    current_password = serializers.CharField(write_only=True, required=False, allow_null=True)
+
+
 class InternalUserSerializer(serializers.Serializer):
     """Safe user fields exposed for service-to-service lookups. No sensitive data."""
 
