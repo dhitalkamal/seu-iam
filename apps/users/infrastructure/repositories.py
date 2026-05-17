@@ -44,6 +44,7 @@ class DjangoUserRepository(IUserRepository):
             is_email_verified=entity.is_email_verified,
             is_active=entity.is_active,
             mfa_enabled=entity.mfa_enabled,
+            mfa_secret=entity.mfa_secret,
             failed_login_attempts=entity.failed_login_attempts,
             locked_until=entity.locked_until,
             deleted_at=entity.deleted_at,

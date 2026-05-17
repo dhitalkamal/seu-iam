@@ -14,22 +14,30 @@ from apps.common.api.responses import created_response, error_response, success_
 from apps.common.health import check_database, check_rabbitmq, check_redis
 from apps.users.application.use_cases.change_password import ChangePasswordUseCase
 from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
+from apps.users.application.use_cases.disable_mfa import DisableMFAUseCase
+from apps.users.application.use_cases.enable_mfa import EnableMFAUseCase
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
+from apps.users.application.use_cases.mfa_challenge import MFAChallengeUseCase
 from apps.users.application.use_cases.profile import GetProfileUseCase, UpdateProfileUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.application.use_cases.request_password_reset import RequestPasswordResetUseCase
 from apps.users.application.use_cases.resend_verification_otp import ResendVerificationOTPUseCase
+from apps.users.application.use_cases.setup_mfa import SetupMFAUseCase
 from apps.users.application.use_cases.verify_email import VerifyEmailUseCase
 from apps.users.infrastructure.event_publisher import RabbitMQEventPublisher
 from apps.users.infrastructure.otp_service import RedisOTPService
 from apps.users.infrastructure.repositories import DjangoUserRepository
 from apps.users.infrastructure.token_service import JWTTokenBlacklistService, JWTTokenService
+from apps.users.infrastructure.totp_service import PyOTPService
 from apps.users.presentation.serializers import (
     ChangePasswordSerializer,
     ConfirmPasswordResetSerializer,
     LoginRequestSerializer,
     LogoutRequestSerializer,
+    MFAChallengeSerializer,
+    MFACodeSerializer,
+    MFASetupResponseSerializer,
     RegisterRequestSerializer,
     RequestPasswordResetSerializer,
     ResendVerificationOTPRequestSerializer,
@@ -422,6 +430,126 @@ class ChangePasswordView(APIView):
             new_password=d["new_password"],
         )
         return success_response({"message": "Password changed successfully."}, request=request)
+
+
+class MFASetupView(APIView):
+    """Generate a TOTP secret and provisioning URI to configure an authenticator app."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="Initiate MFA setup",
+        description=(
+            "Generates a TOTP secret and provisioning URI. "
+            "Scan the URI with an authenticator app then call the enable endpoint to activate MFA."
+        ),
+        responses={
+            200: OpenApiResponse(description="Setup data.", response=MFASetupResponseSerializer),
+            409: OpenApiResponse(description="MFA already enabled."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Generate and return the TOTP secret and provisioning URI."""
+        result = SetupMFAUseCase(DjangoUserRepository(), PyOTPService()).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+        )
+        return success_response(result, request=request)
+
+
+class MFAEnableView(APIView):
+    """Confirm MFA setup by verifying the first TOTP code."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="Enable MFA",
+        description="Submit a valid TOTP code to activate MFA on the account.",
+        request=MFACodeSerializer,
+        responses={
+            200: OpenApiResponse(description="MFA enabled."),
+            400: OpenApiResponse(description="Invalid TOTP code."),
+            409: OpenApiResponse(description="MFA already enabled."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify the code and activate MFA."""
+        ser = MFACodeSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        EnableMFAUseCase(DjangoUserRepository(), PyOTPService()).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+            code=ser.validated_data["code"],
+        )
+        return success_response({"message": "MFA enabled successfully."}, request=request)
+
+
+class MFADisableView(APIView):
+    """Disable MFA after verifying a TOTP code."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="Disable MFA",
+        description="Submit a valid TOTP code to deactivate MFA and clear the stored secret.",
+        request=MFACodeSerializer,
+        responses={
+            200: OpenApiResponse(description="MFA disabled."),
+            400: OpenApiResponse(description="Invalid TOTP code."),
+            409: OpenApiResponse(description="MFA not enabled."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify the code and deactivate MFA."""
+        ser = MFACodeSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        DisableMFAUseCase(DjangoUserRepository(), PyOTPService()).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+            code=ser.validated_data["code"],
+        )
+        return success_response({"message": "MFA disabled successfully."}, request=request)
+
+
+class MFAChallengeView(APIView):
+    """Complete an MFA login by verifying a TOTP code and issuing tokens."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="MFA challenge",
+        description=(
+            "Submit the user_id (from the login response) and a TOTP code. "
+            "Returns JWT tokens on success."
+        ),
+        auth=[],
+        request=MFAChallengeSerializer,
+        responses={
+            200: OpenApiResponse(description="Tokens issued."),
+            400: OpenApiResponse(description="Invalid TOTP code."),
+            401: OpenApiResponse(description="MFA not enabled for this user."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify the TOTP code and return access and refresh tokens."""
+        ser = MFAChallengeSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        result = MFAChallengeUseCase(
+            DjangoUserRepository(), PyOTPService(), JWTTokenService()
+        ).execute(
+            user_id=d["user_id"],
+            code=d["code"],
+        )
+        return success_response(
+            {"access_token": result.access_token, "refresh_token": result.refresh_token},
+            request=request,
+        )
 
 
 class ProfileView(APIView):

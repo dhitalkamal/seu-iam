@@ -17,6 +17,7 @@ from apps.users.domain.repositories import (
     IOTPService,
     ITokenBlacklistService,
     ITokenService,
+    ITOTPService,
     IUserRepository,
 )
 
@@ -95,6 +96,7 @@ class FakeTokenBlacklistService(ITokenBlacklistService):
 
     def __init__(self) -> None:
         self.blacklisted: set[str] = set()
+        self.invalidated_users: set[uuid.UUID] = set()
 
     def blacklist(self, refresh_token: str) -> None:
         """Add the token to the set, or raise if it equals the sentinel value."""
@@ -104,7 +106,6 @@ class FakeTokenBlacklistService(ITokenBlacklistService):
 
     def blacklist_all_for_user(self, user_id: uuid.UUID) -> None:
         """Record that all tokens for this user were invalidated."""
-        self.invalidated_users: set[uuid.UUID] = getattr(self, "invalidated_users", set())
         self.invalidated_users.add(user_id)
 
 
@@ -140,3 +141,22 @@ class FakeEventPublisher(IEventPublisher):
     def publish(self, event_name: str, payload: dict) -> None:
         """Append the event and payload to the recorded list."""
         self.events.append((event_name, payload))
+
+
+class FakeTOTPService(ITOTPService):
+    """Deterministic TOTP fake. Fixed secret and accepts only the sentinel valid code."""
+
+    FIXED_SECRET = "JBSWY3DPEHPK3PXP"
+    VALID_CODE = "123456"
+
+    def generate_secret(self) -> str:
+        """Return a fixed base32 secret for deterministic tests."""
+        return self.FIXED_SECRET
+
+    def get_provisioning_uri(self, secret: str, email: str) -> str:
+        """Return a predictable URI without calling pyotp."""
+        return f"otpauth://totp/Sansaar:{email}?secret={secret}&issuer=Sansaar"
+
+    def verify_code(self, secret: str, code: str) -> bool:
+        """Accept only the sentinel VALID_CODE; reject everything else."""
+        return secret == self.FIXED_SECRET and code == self.VALID_CODE

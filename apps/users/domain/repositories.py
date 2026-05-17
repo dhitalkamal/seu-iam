@@ -72,3 +72,22 @@ class IEventPublisher(ABC):
     def publish(self, event_name: str, payload: dict) -> None:
         """Publish a named event with an arbitrary JSON-serialisable payload."""
         ...
+
+
+class ITOTPService(ABC):
+    """Generates and verifies TOTP secrets and codes."""
+
+    @abstractmethod
+    def generate_secret(self) -> str:
+        """Return a new base32-encoded TOTP secret."""
+        ...
+
+    @abstractmethod
+    def get_provisioning_uri(self, secret: str, email: str) -> str:
+        """Return the otpauth:// URI for QR code display in an authenticator app."""
+        ...
+
+    @abstractmethod
+    def verify_code(self, secret: str, code: str) -> bool:
+        """Return True if code is valid for the given secret at the current time."""
+        ...
