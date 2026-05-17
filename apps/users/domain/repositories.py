@@ -26,6 +26,9 @@ class IUserRepository(ABC):
     @abstractmethod
     def update(self, entity: UserEntity) -> UserEntity: ...
 
+    @abstractmethod
+    def list_all(self) -> list[UserEntity]: ...
+
 
 class ITokenService(ABC):
     """Issues JWT access + refresh token pairs for a given user."""

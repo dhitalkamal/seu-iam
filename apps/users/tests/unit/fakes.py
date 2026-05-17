@@ -85,6 +85,10 @@ class FakeUserRepository(IUserRepository):
         self._store[entity.id] = entity
         return entity
 
+    def list_all(self) -> list[UserEntity]:
+        """Return all non-deleted users."""
+        return [u for u in self._store.values() if u.deleted_at is None]
+
 
 class FakeTokenService(ITokenService):
     """Returns predictable fake token strings for unit tests."""

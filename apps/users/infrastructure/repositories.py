@@ -53,3 +53,10 @@ class DjangoUserRepository(IUserRepository):
             password=entity.password_hash,
         )
         return entity
+
+    def list_all(self) -> list[UserEntity]:
+        """Return all non-deleted users ordered newest first."""
+        return [
+            u.to_entity()
+            for u in User.objects.filter(deleted_at__isnull=True).order_by("-date_joined")
+        ]

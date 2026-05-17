@@ -21,6 +21,11 @@ from apps.users.application.use_cases.enable_mfa import EnableMFAUseCase
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
 from apps.users.application.use_cases.mfa_challenge import MFAChallengeUseCase
+from apps.users.application.use_cases.admin_user_management import (
+    ActivateUserUseCase,
+    ListUsersUseCase,
+    SuspendUserUseCase,
+)
 from apps.users.application.use_cases.profile import GetProfileUseCase, UpdateProfileUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.application.use_cases.request_password_reset import RequestPasswordResetUseCase
@@ -1112,3 +1117,74 @@ class GoogleSocialAuthView(APIView):
             },
             request=request,
         )
+
+
+class AdminUserListView(APIView):
+    """Superadmin: list all platform users."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="List all users",
+        description="Returns every non-deleted user. Restricted to is_staff=True accounts.",
+        responses={
+            200: OpenApiResponse(description="User list.", response=UserResponseSerializer(many=True)),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            403: OpenApiResponse(description="Not a staff account."),
+        },
+    )
+    def get(self, request: Request) -> Response:
+        """Return all users. Staff only."""
+        if not request.user.is_staff:  # type: ignore[union-attr]
+            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
+        users = ListUsersUseCase(DjangoUserRepository()).execute()
+        return success_response(UserResponseSerializer(users, many=True).data, request=request)
+
+
+class AdminUserSuspendView(APIView):
+    """Superadmin: suspend a user account."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Suspend user",
+        request=None,
+        responses={
+            200: OpenApiResponse(description="User suspended.", response=UserResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            403: OpenApiResponse(description="Not a staff account."),
+            404: OpenApiResponse(description="User not found."),
+        },
+    )
+    def post(self, request: Request, user_id: uuid.UUID) -> Response:
+        """Set is_active=False on the given user. Staff only."""
+        if not request.user.is_staff:  # type: ignore[union-attr]
+            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
+        entity = SuspendUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
+        return success_response(UserResponseSerializer(entity).data, request=request)
+
+
+class AdminUserActivateView(APIView):
+    """Superadmin: activate a suspended user account."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Activate user",
+        request=None,
+        responses={
+            200: OpenApiResponse(description="User activated.", response=UserResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            403: OpenApiResponse(description="Not a staff account."),
+            404: OpenApiResponse(description="User not found."),
+        },
+    )
+    def post(self, request: Request, user_id: uuid.UUID) -> Response:
+        """Set is_active=True on the given user. Staff only."""
+        if not request.user.is_staff:  # type: ignore[union-attr]
+            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
+        entity = ActivateUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
+        return success_response(UserResponseSerializer(entity).data, request=request)
