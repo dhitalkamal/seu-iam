@@ -38,6 +38,12 @@ class LoginResponseSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(allow_null=True)
 
 
+class LogoutRequestSerializer(serializers.Serializer):
+    """Payload for invalidating a session refresh token."""
+
+    refresh_token = serializers.CharField()
+
+
 class UserResponseSerializer(serializers.Serializer):
     """Public profile shape returned after registration and on profile reads."""
 

@@ -45,3 +45,10 @@ class AccountLockedError(DomainError):
 
     http_status = 423
     code = "ERR_AUTH_ACCOUNT_LOCKED"
+
+
+class InvalidTokenError(DomainError):
+    """The token is missing, already used, or expired."""
+
+    http_status = 400
+    code = "ERR_AUTH_INVALID_TOKEN"

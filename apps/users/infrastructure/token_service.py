@@ -1,12 +1,14 @@
-"""JWT token generation service for the IAM infrastructure layer."""
+"""JWT token generation and blacklist services for the IAM infrastructure layer."""
 
 from __future__ import annotations
 
 import uuid
 
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.users.domain.repositories import ITokenService
+from apps.users.domain.exceptions import InvalidTokenError
+from apps.users.domain.repositories import ITokenBlacklistService, ITokenService
 
 
 class JWTTokenService(ITokenService):
@@ -19,3 +21,14 @@ class JWTTokenService(ITokenService):
         user = User.objects.get(pk=user_id)
         refresh = RefreshToken.for_user(user)
         return str(refresh.access_token), str(refresh)
+
+
+class JWTTokenBlacklistService(ITokenBlacklistService):
+    """Blacklists a refresh token using simplejwt's built-in blacklist."""
+
+    def blacklist(self, refresh_token: str) -> None:
+        """Add the token to the blacklist. Raises InvalidTokenError if the token is bad."""
+        try:
+            RefreshToken(refresh_token).blacklist()
+        except TokenError as exc:
+            raise InvalidTokenError(str(exc)) from exc

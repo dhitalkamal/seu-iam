@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,11 +13,13 @@ from rest_framework.views import APIView
 from apps.common.api.responses import created_response, error_response, success_response
 from apps.common.health import check_database, check_rabbitmq, check_redis
 from apps.users.application.use_cases.login import LoginUseCase
+from apps.users.application.use_cases.logout import LogoutUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.infrastructure.repositories import DjangoUserRepository
-from apps.users.infrastructure.token_service import JWTTokenService
+from apps.users.infrastructure.token_service import JWTTokenBlacklistService, JWTTokenService
 from apps.users.presentation.serializers import (
     LoginRequestSerializer,
+    LogoutRequestSerializer,
     RegisterRequestSerializer,
     UserResponseSerializer,
 )
@@ -161,8 +163,8 @@ class LoginView(APIView):
         description=(
             "Authenticate with email and password. "
             "Returns JWT tokens on success. "
-            "If MFA is enabled, returns mfa_required=true with a user_id — "
-            "submit that user_id and a TOTP code to the MFA challenge endpoint to get tokens."
+            "If MFA is enabled returns mfa_required=true with a user_id. "
+            "Submit that user_id and a TOTP code to the MFA challenge endpoint to get tokens."
         ),
         auth=[],
         request=LoginRequestSerializer,
@@ -209,3 +211,27 @@ class LoginView(APIView):
             },
             request=request,
         )
+
+
+class LogoutView(APIView):
+    """Blacklist the refresh token to terminate the current session."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Log out",
+        description="Blacklists the provided refresh token server-side so it cannot be reused.",
+        request=LogoutRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Session terminated successfully."),
+            400: OpenApiResponse(description="Token is invalid or already blacklisted."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Blacklist the refresh token from the request body."""
+        ser = LogoutRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        LogoutUseCase(JWTTokenBlacklistService()).execute(ser.validated_data["refresh_token"])
+        return success_response({"message": "Logged out successfully."}, request=request)

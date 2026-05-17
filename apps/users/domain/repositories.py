@@ -29,3 +29,10 @@ class ITokenService(ABC):
 
     @abstractmethod
     def generate_for_user(self, user_id: uuid.UUID) -> tuple[str, str]: ...
+
+
+class ITokenBlacklistService(ABC):
+    """Invalidates a refresh token so it cannot be used again."""
+
+    @abstractmethod
+    def blacklist(self, refresh_token: str) -> None: ...
