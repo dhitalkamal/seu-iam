@@ -44,6 +44,14 @@ class LogoutRequestSerializer(serializers.Serializer):
     refresh_token = serializers.CharField()
 
 
+class UpdateProfileRequestSerializer(serializers.Serializer):
+    """Partial payload for updating the authenticated user's profile."""
+
+    first_name = serializers.CharField(max_length=150, required=False)
+    last_name = serializers.CharField(max_length=150, required=False)
+    avatar_url = serializers.URLField(allow_null=True, required=False)
+
+
 class UserResponseSerializer(serializers.Serializer):
     """Public profile shape returned after registration and on profile reads."""
 

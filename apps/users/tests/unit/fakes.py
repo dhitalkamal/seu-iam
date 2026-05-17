@@ -46,6 +46,13 @@ class FakeUserRepository(IUserRepository):
     def __init__(self, users: list[UserEntity] | None = None) -> None:
         self._store: dict[uuid.UUID, UserEntity] = {u.id: u for u in (users or [])}
 
+    def get_by_id(self, user_id: uuid.UUID) -> UserEntity:
+        """Return the user with this ID or raise UserNotFoundError."""
+        try:
+            return self._store[user_id]
+        except KeyError:
+            raise UserNotFoundError("User not found.")
+
     def get_by_email(self, email: str) -> UserEntity:
         """Return the user with this email or raise UserNotFoundError."""
         for u in self._store.values():

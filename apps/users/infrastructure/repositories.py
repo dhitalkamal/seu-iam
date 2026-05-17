@@ -11,6 +11,13 @@ from apps.users.infrastructure.models import User
 class DjangoUserRepository(IUserRepository):
     """Persists User entities using the Django ORM."""
 
+    def get_by_id(self, user_id: object) -> UserEntity:
+        """Fetch by primary key. Raises UserNotFoundError if absent."""
+        try:
+            return User.objects.get(pk=user_id).to_entity()
+        except User.DoesNotExist:
+            raise UserNotFoundError("User not found.")
+
     def get_by_email(self, email: str) -> UserEntity:
         """Fetch by email. Raises UserNotFoundError if absent."""
         try:

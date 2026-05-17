@@ -14,6 +14,7 @@ from apps.common.api.responses import created_response, error_response, success_
 from apps.common.health import check_database, check_rabbitmq, check_redis
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
+from apps.users.application.use_cases.profile import GetProfileUseCase, UpdateProfileUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.infrastructure.repositories import DjangoUserRepository
 from apps.users.infrastructure.token_service import JWTTokenBlacklistService, JWTTokenService
@@ -21,6 +22,7 @@ from apps.users.presentation.serializers import (
     LoginRequestSerializer,
     LogoutRequestSerializer,
     RegisterRequestSerializer,
+    UpdateProfileRequestSerializer,
     UserResponseSerializer,
 )
 
@@ -235,3 +237,46 @@ class LogoutView(APIView):
 
         LogoutUseCase(JWTTokenBlacklistService()).execute(ser.validated_data["refresh_token"])
         return success_response({"message": "Logged out successfully."}, request=request)
+
+
+class ProfileView(APIView):
+    """Get or update the authenticated user's own profile."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Profile"],
+        summary="Get my profile",
+        responses={
+            200: OpenApiResponse(description="User profile.", response=UserResponseSerializer),
+        },
+    )
+    def get(self, request: Request) -> Response:
+        """Return the full profile of the authenticated user."""
+        entity = GetProfileUseCase(DjangoUserRepository()).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+        )
+        return success_response(UserResponseSerializer(entity).data, request=request)
+
+    @extend_schema(
+        tags=["Profile"],
+        summary="Update my profile",
+        request=UpdateProfileRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Updated profile.", response=UserResponseSerializer),
+            422: OpenApiResponse(description="Validation error."),
+        },
+    )
+    def patch(self, request: Request) -> Response:
+        """Apply partial updates to the authenticated user's profile."""
+        ser = UpdateProfileRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        entity = UpdateProfileUseCase(DjangoUserRepository()).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+            first_name=d.get("first_name"),
+            last_name=d.get("last_name"),
+            avatar_url=d.get("avatar_url"),
+        )
+        return success_response(UserResponseSerializer(entity).data, request=request)

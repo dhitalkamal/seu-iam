@@ -12,6 +12,9 @@ class IUserRepository(ABC):
     """Persistence contract for User aggregates."""
 
     @abstractmethod
+    def get_by_id(self, user_id: uuid.UUID) -> UserEntity: ...
+
+    @abstractmethod
     def get_by_email(self, email: str) -> UserEntity: ...
 
     @abstractmethod
