@@ -1,4 +1,5 @@
 """Base Django settings for the iam-service."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -86,6 +87,8 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+AUTH_USER_MODEL = "users.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
