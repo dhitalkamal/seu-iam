@@ -108,3 +108,17 @@ class InvalidTOTPError(DomainError):
 
     http_status = 400
     code = "ERR_AUTH_INVALID_TOTP"
+
+
+class InvalidBackupCodeError(DomainError):
+    """The backup code is incorrect or has already been used."""
+
+    http_status = 400
+    code = "ERR_AUTH_INVALID_BACKUP_CODE"
+
+
+class NoBackupCodesError(DomainError):
+    """All backup codes have been used. Regenerate to get new ones."""
+
+    http_status = 400
+    code = "ERR_AUTH_NO_BACKUP_CODES"

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from django.urls import URLPattern, path
 
+from apps.users.presentation.backup_code_views import (
+    BackupCodeStatusView,
+    RegenerateBackupCodesView,
+)
 from apps.users.presentation.compliance_views import (
     AuditAwareTokenRefreshView,
     GDPRErasureView,
@@ -51,6 +55,16 @@ urlpatterns: list[URLPattern] = [
     path("auth/mfa/enable/", MFAEnableView.as_view(), name="auth-mfa-enable"),
     path("auth/mfa/disable/", MFADisableView.as_view(), name="auth-mfa-disable"),
     path("auth/mfa/challenge/", MFAChallengeView.as_view(), name="auth-mfa-challenge"),
+    path(
+        "auth/mfa/backup-codes/status/",
+        BackupCodeStatusView.as_view(),
+        name="auth-mfa-backup-codes-status",
+    ),
+    path(
+        "auth/mfa/backup-codes/regenerate/",
+        RegenerateBackupCodesView.as_view(),
+        name="auth-mfa-backup-codes-regenerate",
+    ),
     # social auth
     path("auth/social/google/", GoogleSocialAuthView.as_view(), name="auth-social-google"),
     # sessions

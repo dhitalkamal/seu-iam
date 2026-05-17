@@ -671,16 +671,23 @@ class MFAEnableView(APIView):
         },
     )
     def post(self, request: Request) -> Response:
-        """Verify the code and activate MFA."""
+        """Verify the code, activate MFA, and return one-time backup codes."""
+        from apps.users.infrastructure.backup_code_service import BackupCodeService
+
         ser = MFACodeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
-        EnableMFAUseCase(DjangoUserRepository(), PyOTPService()).execute(
+        result = EnableMFAUseCase(
+            DjangoUserRepository(), PyOTPService(), BackupCodeService()
+        ).execute(
             user_id=request.user.id,  # type: ignore[attr-defined]
             code=ser.validated_data["code"],
         )
         _audit(request, request.user.id, AuditEventType.MFA_ENABLED)  # type: ignore[attr-defined]
-        return success_response({"message": "MFA enabled successfully."}, request=request)
+        return success_response(
+            {"message": "MFA enabled successfully.", "backup_codes": result.backup_codes},
+            request=request,
+        )
 
 
 class MFADisableView(APIView):
@@ -746,21 +753,32 @@ class MFAChallengeView(APIView):
         },
     )
     def post(self, request: Request) -> Response:
-        """Verify the TOTP code and return access and refresh tokens."""
+        """Verify the TOTP or backup code and return access and refresh tokens."""
+        from apps.users.infrastructure.backup_code_service import BackupCodeService
+
         ser = MFAChallengeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
         result = MFAChallengeUseCase(
-            DjangoUserRepository(), PyOTPService(), JWTTokenService()
+            DjangoUserRepository(), PyOTPService(), JWTTokenService(), BackupCodeService()
         ).execute(user_id=d["user_id"], code=d["code"])
 
         if result.refresh_token:
             _create_session(request, result.refresh_token)
-        _audit(request, d["user_id"], AuditEventType.LOGIN_MFA_SUCCESS)
+        _audit(
+            request,
+            d["user_id"],
+            AuditEventType.LOGIN_MFA_SUCCESS,
+            {"used_backup_code": result.used_backup_code},
+        )
 
         return success_response(
-            {"access_token": result.access_token, "refresh_token": result.refresh_token},
+            {
+                "access_token": result.access_token,
+                "refresh_token": result.refresh_token,
+                "used_backup_code": result.used_backup_code,
+            },
             request=request,
         )
 

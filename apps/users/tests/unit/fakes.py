@@ -194,3 +194,34 @@ class FakePasswordHistoryService(IPasswordHistoryService):
 
     def record(self, user_id: uuid.UUID, password_hash: str) -> None:
         """No-op in unit tests."""
+
+
+class FakeBackupCodeService:
+    """In-memory backup code service for unit tests."""
+
+    VALID_CODE = "BACKCODE"
+    CODE_COUNT = 8
+
+    def __init__(self) -> None:
+        self._active: dict[uuid.UUID, set[str]] = {}
+
+    def generate(self, user_id: uuid.UUID) -> list[str]:
+        """Return CODE_COUNT deterministic codes including VALID_CODE and store them."""
+        codes = [self.VALID_CODE] + [f"CODE{i:04d}" for i in range(self.CODE_COUNT - 1)]
+        self._active[user_id] = set(codes)
+        return codes
+
+    def verify_and_consume(self, user_id: uuid.UUID, code: str) -> None:
+        """Consume the code if valid; raise InvalidBackupCodeError otherwise."""
+        from apps.users.domain.exceptions import InvalidBackupCodeError, NoBackupCodesError
+
+        pool = self._active.get(user_id, set())
+        if not pool:
+            raise NoBackupCodesError("No backup codes remaining.")
+        if code not in pool:
+            raise InvalidBackupCodeError("Backup code is incorrect or already used.")
+        pool.discard(code)
+
+    def remaining_count(self, user_id: uuid.UUID) -> int:
+        """Return the number of unused codes."""
+        return len(self._active.get(user_id, set()))
