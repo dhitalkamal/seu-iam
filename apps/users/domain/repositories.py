@@ -74,6 +74,20 @@ class IEventPublisher(ABC):
         ...
 
 
+class IPasswordHistoryService(ABC):
+    """Checks and records password history to prevent reuse."""
+
+    @abstractmethod
+    def check(self, user_id: uuid.UUID, new_password: str) -> None:
+        """Raise WeakPasswordError if new_password was recently used."""
+        ...
+
+    @abstractmethod
+    def record(self, user_id: uuid.UUID, password_hash: str) -> None:
+        """Store the new hash, pruning old entries beyond the limit."""
+        ...
+
+
 class IGoogleTokenVerifier(ABC):
     """Verifies a Google ID token and returns the decoded payload."""
 

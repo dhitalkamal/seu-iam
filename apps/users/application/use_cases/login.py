@@ -79,4 +79,6 @@ class LoginUseCase:
             return LoginResult(mfa_required=True, user_id=user.id)
 
         access, refresh = self._tokens.generate_for_user(user.id)
-        return LoginResult(mfa_required=False, access_token=access, refresh_token=refresh)
+        return LoginResult(
+            mfa_required=False, user_id=user.id, access_token=access, refresh_token=refresh
+        )

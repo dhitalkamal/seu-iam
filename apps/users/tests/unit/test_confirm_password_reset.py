@@ -9,10 +9,21 @@ from apps.users.application.use_cases.confirm_password_reset import ConfirmPassw
 from apps.users.domain.exceptions import OTPExpiredError, OTPInvalidError, UserNotFoundError
 from apps.users.tests.unit.fakes import (
     FakeOTPService,
+    FakePasswordHistoryService,
     FakeTokenBlacklistService,
     FakeUserRepository,
     make_user,
 )
+
+
+def _uc(
+    repo: FakeUserRepository,
+    otp: FakeOTPService,
+    blacklist: FakeTokenBlacklistService | None = None,
+) -> ConfirmPasswordResetUseCase:
+    return ConfirmPasswordResetUseCase(
+        repo, otp, blacklist or FakeTokenBlacklistService(), FakePasswordHistoryService()
+    )
 
 
 def test_confirm_reset_updates_password():
@@ -22,14 +33,11 @@ def test_confirm_reset_updates_password():
     otp_svc = FakeOTPService()
     otp_svc.generate_and_store(user.id)
 
-    ConfirmPasswordResetUseCase(repo, otp_svc, FakeTokenBlacklistService()).execute(
-        email=user.email,
-        otp=FakeOTPService.FIXED_OTP,
-        new_password="NewSecurePass1!",
+    _uc(repo, otp_svc).execute(
+        email=user.email, otp=FakeOTPService.FIXED_OTP, new_password="NewSecurePass1!"
     )
 
-    updated = repo.get_by_id(user.id)
-    assert check_password("NewSecurePass1!", updated.password_hash)
+    assert check_password("NewSecurePass1!", repo.get_by_id(user.id).password_hash)
 
 
 def test_confirm_reset_blacklists_all_user_tokens():
@@ -40,10 +48,8 @@ def test_confirm_reset_blacklists_all_user_tokens():
     otp_svc.generate_and_store(user.id)
     blacklist_svc = FakeTokenBlacklistService()
 
-    ConfirmPasswordResetUseCase(repo, otp_svc, blacklist_svc).execute(
-        email=user.email,
-        otp=FakeOTPService.FIXED_OTP,
-        new_password="NewSecurePass1!",
+    _uc(repo, otp_svc, blacklist_svc).execute(
+        email=user.email, otp=FakeOTPService.FIXED_OTP, new_password="NewSecurePass1!"
     )
 
     assert user.id in blacklist_svc.invalidated_users
@@ -56,10 +62,8 @@ def test_confirm_reset_consumes_otp():
     otp_svc = FakeOTPService()
     otp_svc.generate_and_store(user.id)
 
-    ConfirmPasswordResetUseCase(repo, otp_svc, FakeTokenBlacklistService()).execute(
-        email=user.email,
-        otp=FakeOTPService.FIXED_OTP,
-        new_password="NewSecurePass1!",
+    _uc(repo, otp_svc).execute(
+        email=user.email, otp=FakeOTPService.FIXED_OTP, new_password="NewSecurePass1!"
     )
 
     assert user.id not in otp_svc._store  # type: ignore[attr-defined]
@@ -73,11 +77,7 @@ def test_confirm_reset_raises_on_wrong_otp():
     otp_svc.generate_and_store(user.id)
 
     with pytest.raises(OTPInvalidError):
-        ConfirmPasswordResetUseCase(repo, otp_svc, FakeTokenBlacklistService()).execute(
-            email=user.email,
-            otp="WRONGOTP",
-            new_password="NewSecurePass1!",
-        )
+        _uc(repo, otp_svc).execute(email=user.email, otp="WRONGOTP", new_password="NewSecurePass1!")
 
 
 def test_confirm_reset_raises_on_expired_otp():
@@ -86,10 +86,8 @@ def test_confirm_reset_raises_on_expired_otp():
     repo = FakeUserRepository([user])
 
     with pytest.raises(OTPExpiredError):
-        ConfirmPasswordResetUseCase(repo, FakeOTPService(), FakeTokenBlacklistService()).execute(
-            email=user.email,
-            otp="ABCD1234",
-            new_password="NewSecurePass1!",
+        _uc(repo, FakeOTPService()).execute(
+            email=user.email, otp="ABCD1234", new_password="NewSecurePass1!"
         )
 
 
@@ -98,8 +96,6 @@ def test_confirm_reset_raises_for_unknown_email():
     repo = FakeUserRepository()
 
     with pytest.raises(UserNotFoundError):
-        ConfirmPasswordResetUseCase(repo, FakeOTPService(), FakeTokenBlacklistService()).execute(
-            email="ghost@example.com",
-            otp="ABCD1234",
-            new_password="NewSecurePass1!",
+        _uc(repo, FakeOTPService()).execute(
+            email="ghost@example.com", otp="ABCD1234", new_password="NewSecurePass1!"
         )

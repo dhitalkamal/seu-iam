@@ -128,6 +128,8 @@ OTP_TTL_SECONDS = config("OTP_TTL_SECONDS", default=600, cast=int)
 GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
 GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET", default="")
 
+PASSWORD_HISTORY_LIMIT = config("PASSWORD_HISTORY_LIMIT", default=5, cast=int)
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",

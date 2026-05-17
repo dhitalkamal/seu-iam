@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers
@@ -25,10 +27,19 @@ from apps.users.application.use_cases.request_password_reset import RequestPassw
 from apps.users.application.use_cases.resend_verification_otp import ResendVerificationOTPUseCase
 from apps.users.application.use_cases.setup_mfa import SetupMFAUseCase
 from apps.users.application.use_cases.verify_email import VerifyEmailUseCase
+from apps.users.domain.audit import AuditEventType
+from apps.users.infrastructure.audit_repository import DjangoAuditLogRepository
+from apps.users.infrastructure.audit_service import AuditService
 from apps.users.infrastructure.event_publisher import RabbitMQEventPublisher
 from apps.users.infrastructure.otp_service import RedisOTPService
+from apps.users.infrastructure.password_history_service import PasswordHistoryService
 from apps.users.infrastructure.repositories import DjangoUserRepository
-from apps.users.infrastructure.token_service import JWTTokenBlacklistService, JWTTokenService
+from apps.users.infrastructure.session_service import SessionService
+from apps.users.infrastructure.token_service import (
+    JWTTokenBlacklistService,
+    JWTTokenService,
+    extract_jti,
+)
 from apps.users.infrastructure.totp_service import PyOTPService
 from apps.users.presentation.serializers import (
     ChangePasswordSerializer,
@@ -110,26 +121,21 @@ _CHECKS = inline_serializer(
     },
 )
 
-# reusable per-status OpenApiResponse objects
 _R400 = OpenApiResponse(
     description="Request contains invalid data (e.g. wrong or expired OTP).",
     response=_ERROR_ENVELOPE,
 )
 _R401 = OpenApiResponse(
-    description="Authentication credentials are missing or invalid.",
-    response=_ERROR_ENVELOPE,
+    description="Authentication credentials are missing or invalid.", response=_ERROR_ENVELOPE
 )
 _R403 = OpenApiResponse(
-    description="You do not have permission to perform this action.",
-    response=_ERROR_ENVELOPE,
+    description="You do not have permission to perform this action.", response=_ERROR_ENVELOPE
 )
 _R404 = OpenApiResponse(
-    description="The requested resource was not found.",
-    response=_ERROR_ENVELOPE,
+    description="The requested resource was not found.", response=_ERROR_ENVELOPE
 )
 _R409 = OpenApiResponse(
-    description="Request conflicts with the current resource state.",
-    response=_ERROR_ENVELOPE,
+    description="Request conflicts with the current resource state.", response=_ERROR_ENVELOPE
 )
 _R422 = OpenApiResponse(
     description="Payload failed validation. details contains a flat list of {field, message} objects.",
@@ -140,9 +146,28 @@ _R423 = OpenApiResponse(
     response=_ERROR_ENVELOPE,
 )
 _R503 = OpenApiResponse(
-    description="One or more dependencies are unavailable.",
-    response=_ERROR_ENVELOPE,
+    description="One or more dependencies are unavailable.", response=_ERROR_ENVELOPE
 )
+
+
+def _audit(
+    request: Request, user_id: uuid.UUID, event_type: str, metadata: dict | None = None
+) -> None:
+    """Write an audit log entry, swallowing persistence errors so they never block responses."""
+    AuditService(DjangoAuditLogRepository()).log(request, user_id, event_type, metadata)
+
+
+def _create_session(request: Request, refresh_token: str) -> None:
+    """Create a UserSession record for the issued refresh token, swallowing errors."""
+    try:
+        jti = extract_jti(refresh_token)
+        from rest_framework_simplejwt.tokens import RefreshToken as JWTRefresh
+
+        token = JWTRefresh(refresh_token)
+        user_id = uuid.UUID(str(token["user_id"]))
+        SessionService().create_session(request, user_id, jti)
+    except Exception:
+        pass
 
 
 class HealthCheckView(APIView):
@@ -264,6 +289,7 @@ class RegisterView(APIView):
             first_name=d["first_name"],
             last_name=d["last_name"],
         )
+        _audit(request, entity.id, AuditEventType.USER_REGISTERED, {"email": entity.email})
         return created_response(UserResponseSerializer(entity).data, request=request)
 
 
@@ -328,6 +354,15 @@ class LoginView(APIView):
             email=d["email"],
             password=d["password"],
         )
+
+        if result.user_id:
+            if result.mfa_required:
+                _audit(request, result.user_id, AuditEventType.LOGIN_MFA_CHALLENGED)
+            else:
+                if result.refresh_token:
+                    _create_session(request, result.refresh_token)
+                _audit(request, result.user_id, AuditEventType.LOGIN_SUCCESS)
+
         return success_response(
             {
                 "mfa_required": result.mfa_required,
@@ -351,8 +386,7 @@ class LogoutView(APIView):
         request=LogoutRequestSerializer,
         responses={
             200: OpenApiResponse(
-                description="Session terminated successfully.",
-                response=_MSG_ENVELOPE,
+                description="Session terminated successfully.", response=_MSG_ENVELOPE
             ),
             400: _R400,
             401: _R401,
@@ -365,6 +399,7 @@ class LogoutView(APIView):
         ser.is_valid(raise_exception=True)
 
         LogoutUseCase(JWTTokenBlacklistService()).execute(ser.validated_data["refresh_token"])
+        _audit(request, request.user.id, AuditEventType.LOGOUT)  # type: ignore[attr-defined]
         return success_response({"message": "Logged out successfully."}, request=request)
 
 
@@ -385,8 +420,7 @@ class VerifyEmailView(APIView):
         request=VerifyEmailRequestSerializer,
         responses={
             200: OpenApiResponse(
-                description="Email verified successfully.",
-                response=_MSG_ENVELOPE,
+                description="Email verified successfully.", response=_MSG_ENVELOPE
             ),
             400: _R400,
             404: _R404,
@@ -401,9 +435,13 @@ class VerifyEmailView(APIView):
         d = ser.validated_data
 
         VerifyEmailUseCase(DjangoUserRepository(), RedisOTPService()).execute(
-            email=d["email"],
-            otp=d["otp"],
+            email=d["email"], otp=d["otp"]
         )
+        try:
+            user = DjangoUserRepository().get_by_email(d["email"])
+            _audit(request, user.id, AuditEventType.EMAIL_VERIFIED)
+        except Exception:
+            pass
         return success_response({"message": "Email verified successfully."}, request=request)
 
 
@@ -424,8 +462,7 @@ class ResendVerificationOTPView(APIView):
         request=ResendVerificationOTPRequestSerializer,
         responses={
             200: OpenApiResponse(
-                description="Verification OTP sent to the email address.",
-                response=_MSG_ENVELOPE,
+                description="Verification OTP sent to the email address.", response=_MSG_ENVELOPE
             ),
             404: _R404,
             409: _R409,
@@ -461,8 +498,7 @@ class RequestPasswordResetView(APIView):
         request=RequestPasswordResetSerializer,
         responses={
             200: OpenApiResponse(
-                description="Password reset OTP sent to the email address.",
-                response=_MSG_ENVELOPE,
+                description="Password reset OTP sent to the email address.", response=_MSG_ENVELOPE
             ),
             401: _R401,
             404: _R404,
@@ -477,6 +513,11 @@ class RequestPasswordResetView(APIView):
         RequestPasswordResetUseCase(
             DjangoUserRepository(), RedisOTPService("password_reset"), RabbitMQEventPublisher()
         ).execute(email=ser.validated_data["email"])
+        try:
+            user = DjangoUserRepository().get_by_email(ser.validated_data["email"])
+            _audit(request, user.id, AuditEventType.PASSWORD_RESET_REQUESTED)
+        except Exception:
+            pass
         return success_response({"message": "Password reset OTP sent."}, request=request)
 
 
@@ -492,7 +533,7 @@ class ConfirmPasswordResetView(APIView):
         description=(
             "Submit the OTP and a new password to complete the reset. "
             "All existing sessions are invalidated on success. "
-            "The new password must meet the minimum security requirements."
+            "The new password must meet the minimum security requirements and not be recently used."
         ),
         auth=[],
         request=ConfirmPasswordResetSerializer,
@@ -507,18 +548,25 @@ class ConfirmPasswordResetView(APIView):
         },
     )
     def post(self, request: Request) -> Response:
-        """Validate OTP, update password, and invalidate all sessions."""
+        """Validate OTP, check history, update password, and invalidate all sessions."""
         ser = ConfirmPasswordResetSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
+        try:
+            _uid = DjangoUserRepository().get_by_email(d["email"]).id
+        except Exception:
+            _uid = None
+
         ConfirmPasswordResetUseCase(
-            DjangoUserRepository(), RedisOTPService("password_reset"), JWTTokenBlacklistService()
-        ).execute(
-            email=d["email"],
-            otp=d["otp"],
-            new_password=d["new_password"],
-        )
+            DjangoUserRepository(),
+            RedisOTPService("password_reset"),
+            JWTTokenBlacklistService(),
+            PasswordHistoryService(),
+        ).execute(email=d["email"], otp=d["otp"], new_password=d["new_password"])
+
+        if _uid:
+            _audit(request, _uid, AuditEventType.PASSWORD_RESET_COMPLETED)
         return success_response({"message": "Password reset successfully."}, request=request)
 
 
@@ -533,6 +581,7 @@ class ChangePasswordView(APIView):
         description=(
             "Change the authenticated user's password. "
             "Requires the current password for verification. "
+            "Cannot reuse any of the last 5 passwords. "
             "All existing sessions are invalidated on success."
         ),
         request=ChangePasswordSerializer,
@@ -546,16 +595,19 @@ class ChangePasswordView(APIView):
         },
     )
     def post(self, request: Request) -> Response:
-        """Verify current password, set new one, and blacklist all sessions."""
+        """Verify current password, check history, set new one, and blacklist all sessions."""
         ser = ChangePasswordSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        ChangePasswordUseCase(DjangoUserRepository(), JWTTokenBlacklistService()).execute(
+        ChangePasswordUseCase(
+            DjangoUserRepository(), JWTTokenBlacklistService(), PasswordHistoryService()
+        ).execute(
             user_id=request.user.id,  # type: ignore[attr-defined]
             current_password=d["current_password"],
             new_password=d["new_password"],
         )
+        _audit(request, request.user.id, AuditEventType.PASSWORD_CHANGED)  # type: ignore[attr-defined]
         return success_response({"message": "Password changed successfully."}, request=request)
 
 
@@ -611,10 +663,7 @@ class MFAEnableView(APIView):
         ),
         request=MFACodeSerializer,
         responses={
-            200: OpenApiResponse(
-                description="MFA enabled successfully.",
-                response=_MSG_ENVELOPE,
-            ),
+            200: OpenApiResponse(description="MFA enabled successfully.", response=_MSG_ENVELOPE),
             400: _R400,
             401: _R401,
             409: _R409,
@@ -630,6 +679,7 @@ class MFAEnableView(APIView):
             user_id=request.user.id,  # type: ignore[attr-defined]
             code=ser.validated_data["code"],
         )
+        _audit(request, request.user.id, AuditEventType.MFA_ENABLED)  # type: ignore[attr-defined]
         return success_response({"message": "MFA enabled successfully."}, request=request)
 
 
@@ -648,8 +698,7 @@ class MFADisableView(APIView):
         request=MFACodeSerializer,
         responses={
             200: OpenApiResponse(
-                description="MFA disabled successfully. Secret cleared.",
-                response=_MSG_ENVELOPE,
+                description="MFA disabled successfully. Secret cleared.", response=_MSG_ENVELOPE
             ),
             400: _R400,
             401: _R401,
@@ -666,6 +715,7 @@ class MFADisableView(APIView):
             user_id=request.user.id,  # type: ignore[attr-defined]
             code=ser.validated_data["code"],
         )
+        _audit(request, request.user.id, AuditEventType.MFA_DISABLED)  # type: ignore[attr-defined]
         return success_response({"message": "MFA disabled successfully."}, request=request)
 
 
@@ -687,8 +737,7 @@ class MFAChallengeView(APIView):
         request=MFAChallengeSerializer,
         responses={
             200: OpenApiResponse(
-                description="TOTP verified. JWT tokens issued.",
-                response=_TOKEN_PAIR_ENVELOPE,
+                description="TOTP verified. JWT tokens issued.", response=_TOKEN_PAIR_ENVELOPE
             ),
             400: _R400,
             401: _R401,
@@ -704,10 +753,12 @@ class MFAChallengeView(APIView):
 
         result = MFAChallengeUseCase(
             DjangoUserRepository(), PyOTPService(), JWTTokenService()
-        ).execute(
-            user_id=d["user_id"],
-            code=d["code"],
-        )
+        ).execute(user_id=d["user_id"], code=d["code"])
+
+        if result.refresh_token:
+            _create_session(request, result.refresh_token)
+        _audit(request, d["user_id"], AuditEventType.LOGIN_MFA_SUCCESS)
+
         return success_response(
             {"access_token": result.access_token, "refresh_token": result.refresh_token},
             request=request,
@@ -783,6 +834,7 @@ class ProfileView(APIView):
             last_name=d.get("last_name"),
             avatar_url=d.get("avatar_url"),
         )
+        _audit(request, request.user.id, AuditEventType.PROFILE_UPDATED, {"fields": list(d.keys())})  # type: ignore[attr-defined]
         return success_response(UserResponseSerializer(entity).data, request=request)
 
     @extend_schema(
@@ -803,9 +855,11 @@ class ProfileView(APIView):
         """Soft-delete the account and blacklist all sessions."""
         from apps.users.application.use_cases.delete_account import DeleteAccountUseCase
 
+        user_id = request.user.id  # type: ignore[attr-defined]
         DeleteAccountUseCase(DjangoUserRepository(), JWTTokenBlacklistService()).execute(
-            user_id=request.user.id,  # type: ignore[attr-defined]
+            user_id=user_id,
         )
+        _audit(request, user_id, AuditEventType.ACCOUNT_DELETED)
         return Response(status=204)
 
 
@@ -920,6 +974,21 @@ class GoogleSocialAuthView(APIView):
         result = GoogleSocialAuthUseCase(
             DjangoUserRepository(), GoogleTokenVerifier(), JWTTokenService()
         ).execute(id_token=ser.validated_data["id_token"])
+
+        if result.refresh_token:
+            _create_session(request, result.refresh_token)
+        try:
+            user = DjangoUserRepository().get_by_email(
+                GoogleTokenVerifier().verify(ser.validated_data["id_token"])["email"]
+            )
+            _audit(
+                request,
+                user.id,
+                AuditEventType.SOCIAL_AUTH_GOOGLE,
+                {"is_new_user": result.is_new_user},
+            )
+        except Exception:
+            pass
 
         return success_response(
             {

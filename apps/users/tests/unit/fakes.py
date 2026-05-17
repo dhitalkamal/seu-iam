@@ -17,6 +17,7 @@ from apps.users.domain.repositories import (
     IEventPublisher,
     IGoogleTokenVerifier,
     IOTPService,
+    IPasswordHistoryService,
     ITokenBlacklistService,
     ITokenService,
     ITOTPService,
@@ -183,3 +184,13 @@ class FakeGoogleTokenVerifier(IGoogleTokenVerifier):
         if id_token != self.VALID_TOKEN:
             raise SocialAuthError("Invalid Google ID token.")
         return self.PAYLOAD
+
+
+class FakePasswordHistoryService(IPasswordHistoryService):
+    """No-op history service for unit tests — never rejects and never stores."""
+
+    def check(self, user_id: uuid.UUID, new_password: str) -> None:
+        """Always passes — no history stored in unit tests."""
+
+    def record(self, user_id: uuid.UUID, password_hash: str) -> None:
+        """No-op in unit tests."""

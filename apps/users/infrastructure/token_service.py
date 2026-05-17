@@ -11,6 +11,11 @@ from apps.users.domain.exceptions import InvalidTokenError
 from apps.users.domain.repositories import ITokenBlacklistService, ITokenService
 
 
+def extract_jti(refresh_token_str: str) -> uuid.UUID:
+    """Parse a refresh token string and return its JTI claim as a UUID."""
+    return uuid.UUID(RefreshToken(refresh_token_str)["jti"])
+
+
 class JWTTokenService(ITokenService):
     """Generates simplejwt access and refresh token pairs for a given user ID."""
 
@@ -24,17 +29,23 @@ class JWTTokenService(ITokenService):
 
 
 class JWTTokenBlacklistService(ITokenBlacklistService):
-    """Blacklists a refresh token using simplejwt's built-in blacklist."""
+    """Blacklists refresh tokens and revokes the matching UserSession records."""
 
     def blacklist(self, refresh_token: str) -> None:
-        """Add the token to the blacklist. Raises InvalidTokenError if the token is bad."""
+        """Blacklist the token and mark its session inactive."""
         try:
-            RefreshToken(refresh_token).blacklist()
+            token = RefreshToken(refresh_token)
+            jti = uuid.UUID(token["jti"])
+            token.blacklist()
         except TokenError as exc:
             raise InvalidTokenError(str(exc)) from exc
 
+        from apps.users.infrastructure.session_models import UserSession
+
+        UserSession.objects.filter(jti=jti).update(is_active=False)
+
     def blacklist_all_for_user(self, user_id: uuid.UUID) -> None:
-        """Blacklist every outstanding refresh token for the given user."""
+        """Blacklist every outstanding token and revoke all sessions for the user."""
         from rest_framework_simplejwt.token_blacklist.models import (
             BlacklistedToken,
             OutstandingToken,
@@ -43,3 +54,7 @@ class JWTTokenBlacklistService(ITokenBlacklistService):
         tokens = OutstandingToken.objects.filter(user_id=user_id)
         for token in tokens:
             BlacklistedToken.objects.get_or_create(token=token)
+
+        from apps.users.infrastructure.session_models import UserSession
+
+        UserSession.objects.filter(user_id=user_id, is_active=True).update(is_active=False)

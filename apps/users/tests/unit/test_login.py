@@ -27,7 +27,7 @@ def test_valid_credentials_return_tokens():
     assert result.mfa_required is False
     assert result.access_token is not None
     assert result.refresh_token is not None
-    assert result.user_id is None
+    assert result.user_id is not None
 
 
 def test_mfa_enabled_returns_challenge():
