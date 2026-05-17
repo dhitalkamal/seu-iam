@@ -12,6 +12,13 @@ class UserAlreadyExistsError(DomainError):
     code = "ERR_AUTH_USER_ALREADY_EXISTS"
 
 
+class WeakPasswordError(DomainError):
+    """The password does not meet the minimum security requirements."""
+
+    http_status = 422
+    code = "ERR_AUTH_WEAK_PASSWORD"
+
+
 class UserNotFoundError(DomainError):
     """No user matches the given identifier."""
 
