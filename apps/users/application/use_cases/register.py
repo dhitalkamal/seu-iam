@@ -10,7 +10,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from apps.users.domain.entities import UserEntity
-from apps.users.domain.exceptions import UserAlreadyExistsError
+from apps.users.domain.exceptions import UserAlreadyExistsError, WeakPasswordError
 from apps.users.domain.repositories import IEventPublisher, IOTPService, IUserRepository
 
 
@@ -37,6 +37,7 @@ class RegisterUseCase:
         @param last_name - user's family name
         @returns the newly created UserEntity
         @raises UserAlreadyExistsError if email is already taken
+        @raises WeakPasswordError if the password fails Django validators
         """
         email = email.lower().strip()
 
@@ -46,7 +47,7 @@ class RegisterUseCase:
         try:
             validate_password(password)
         except DjangoValidationError as exc:
-            raise UserAlreadyExistsError(exc.messages[0]) from exc
+            raise WeakPasswordError(exc.messages[0]) from exc
 
         now = datetime.now(timezone.utc)
         entity = UserEntity(

@@ -54,7 +54,10 @@ class LoginUseCase:
 
         now = datetime.now(timezone.utc)
         if user.locked_until and user.locked_until > now:
-            raise AccountLockedError("Account is temporarily locked due to failed login attempts.")
+            raise AccountLockedError(
+                "Account is temporarily locked due to failed login attempts.",
+                details={"locked_until": user.locked_until.isoformat()},
+            )
 
         if not check_password(password, user.password_hash):
             user.failed_login_attempts += 1

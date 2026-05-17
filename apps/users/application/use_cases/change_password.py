@@ -8,7 +8,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
-from apps.users.domain.exceptions import InvalidCredentialsError, UserAlreadyExistsError
+from apps.users.domain.exceptions import InvalidCredentialsError, WeakPasswordError
 from apps.users.domain.repositories import ITokenBlacklistService, IUserRepository
 
 
@@ -31,7 +31,7 @@ class ChangePasswordUseCase:
         @param current_password - must match the stored hash
         @param new_password - new plaintext password, validated against Django validators
         @raises InvalidCredentialsError if current_password does not match
-        @raises UserAlreadyExistsError if new_password fails Django validators
+        @raises WeakPasswordError if new_password fails Django validators
         """
         user = self._users.get_by_id(user_id)
 
@@ -41,7 +41,7 @@ class ChangePasswordUseCase:
         try:
             validate_password(new_password)
         except DjangoValidationError as exc:
-            raise UserAlreadyExistsError(exc.messages[0]) from exc
+            raise WeakPasswordError(exc.messages[0]) from exc
 
         user.password_hash = make_password(new_password)
         self._users.update(user)
