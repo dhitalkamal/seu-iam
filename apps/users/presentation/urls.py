@@ -9,6 +9,7 @@ from .views import (
     ChangePasswordView,
     ConfirmPasswordResetView,
     HealthCheckView,
+    InternalUserView,
     LoginView,
     LogoutView,
     MFAChallengeView,
@@ -42,4 +43,5 @@ urlpatterns: list[URLPattern] = [
     path("auth/mfa/disable/", MFADisableView.as_view(), name="auth-mfa-disable"),
     path("auth/mfa/challenge/", MFAChallengeView.as_view(), name="auth-mfa-challenge"),
     path("profile/me/", ProfileView.as_view(), name="profile-me"),
+    path("internal/users/<uuid:user_id>/", InternalUserView.as_view(), name="internal-user"),
 ]
