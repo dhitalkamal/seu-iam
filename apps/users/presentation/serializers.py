@@ -10,8 +10,16 @@ class RegisterRequestSerializer(serializers.Serializer):
 
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    confirm_password = serializers.CharField(write_only=True, min_length=8, max_length=128)
     first_name = serializers.CharField(max_length=150)
     last_name = serializers.CharField(max_length=150)
+
+    def validate(self, attrs: dict) -> dict:
+        """Check that both password fields match, then remove confirm_password before returning."""
+        if attrs["password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        attrs.pop("confirm_password")
+        return attrs
 
 
 class UserResponseSerializer(serializers.Serializer):
