@@ -147,3 +147,7 @@ SPECTACULAR_SETTINGS = {
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/v1/",
 }
+
+# Security: account lockout after N failed attempts
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+ACCOUNT_LOCKOUT_MINUTES = 15
