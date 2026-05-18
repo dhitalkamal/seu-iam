@@ -122,6 +122,9 @@ class UserResponseSerializer(serializers.Serializer):
     phone = serializers.CharField(allow_null=True)
     bio = serializers.CharField(allow_null=True)
     is_email_verified = serializers.BooleanField()
+    is_active = serializers.BooleanField()
+    is_staff = serializers.BooleanField()
+    is_superuser = serializers.BooleanField()
     mfa_enabled = serializers.BooleanField()
     date_joined = serializers.DateTimeField()
 
@@ -162,7 +165,7 @@ class MFAEnableResponseSerializer(serializers.Serializer):
     message = serializers.CharField()
     backup_codes = serializers.ListField(
         child=serializers.CharField(),
-        help_text="One-time backup codes. Store these securely — they are shown only once.",
+        help_text="One-time backup codes. Store these securely - they are shown only once.",
     )
 
 
@@ -176,7 +179,7 @@ class RegenerateBackupCodesResponseSerializer(serializers.Serializer):
 
 
 class BackupCodeStatusSerializer(serializers.Serializer):
-    """Status of a user's backup codes — count only, no plaintext."""
+    """Status of a user's backup codes - count only, no plaintext."""
 
     remaining = serializers.IntegerField(help_text="Number of unused backup codes remaining.")
 

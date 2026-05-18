@@ -16,6 +16,8 @@ from apps.users.presentation.compliance_views import (
     RevokeSessionView,
 )
 from apps.users.presentation.views import (
+    AdminAuditLogView,
+    AdminIAMAnalyticsView,
     AdminUserActivateView,
     AdminUserListView,
     AdminUserSuspendView,
@@ -90,4 +92,6 @@ urlpatterns: list[URLPattern] = [
     path("admin/users/", AdminUserListView.as_view(), name="admin-users"),
     path("admin/users/<uuid:user_id>/suspend/", AdminUserSuspendView.as_view(), name="admin-user-suspend"),
     path("admin/users/<uuid:user_id>/activate/", AdminUserActivateView.as_view(), name="admin-user-activate"),
+    path("admin/audit-log/", AdminAuditLogView.as_view(), name="admin-audit-log"),
+    path("admin/analytics/", AdminIAMAnalyticsView.as_view(), name="admin-iam-analytics"),
 ]

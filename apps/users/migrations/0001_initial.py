@@ -10,10 +10,13 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("auth", "0012_alter_user_first_name_max_length"),
-        ("users", "0000_create_iam_schema"),
     ]
 
     operations = [
+        migrations.RunSQL(
+            sql="CREATE SCHEMA IF NOT EXISTS iam;",
+            reverse_sql="DROP SCHEMA IF EXISTS iam CASCADE;",
+        ),
         migrations.CreateModel(
             name="User",
             fields=[

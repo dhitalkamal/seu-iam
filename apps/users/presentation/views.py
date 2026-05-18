@@ -14,6 +14,11 @@ from rest_framework.views import APIView
 
 from apps.common.api.responses import created_response, error_response, success_response
 from apps.common.health import check_database, check_rabbitmq, check_redis
+from apps.users.application.use_cases.admin_user_management import (
+    ActivateUserUseCase,
+    ListUsersUseCase,
+    SuspendUserUseCase,
+)
 from apps.users.application.use_cases.change_password import ChangePasswordUseCase
 from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
 from apps.users.application.use_cases.disable_mfa import DisableMFAUseCase
@@ -21,11 +26,6 @@ from apps.users.application.use_cases.enable_mfa import EnableMFAUseCase
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
 from apps.users.application.use_cases.mfa_challenge import MFAChallengeUseCase
-from apps.users.application.use_cases.admin_user_management import (
-    ActivateUserUseCase,
-    ListUsersUseCase,
-    SuspendUserUseCase,
-)
 from apps.users.application.use_cases.profile import GetProfileUseCase, UpdateProfileUseCase
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.application.use_cases.request_password_reset import RequestPasswordResetUseCase
@@ -334,7 +334,7 @@ class LoginView(APIView):
         description=(
             "Authenticate with email and password. "
             "Returns JWT tokens on success. "
-            "When MFA is enabled, returns mfa_required=true and user_id instead of tokens — "
+            "When MFA is enabled, returns mfa_required=true and user_id instead of tokens; "
             "complete login via POST /auth/mfa/challenge/."
         ),
         auth=[],
@@ -994,7 +994,7 @@ class InternalUserView(APIView):
         description=(
             "Returns safe user fields for service-to-service lookups. "
             "No sensitive data (password, MFA secret, lock state) is included. "
-            "This endpoint trusts the internal network — restrict it at the gateway in production."
+            "This endpoint trusts the internal network; restrict it at the gateway in production."
         ),
         auth=[],
         responses={
@@ -1188,3 +1188,125 @@ class AdminUserActivateView(APIView):
             return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
         entity = ActivateUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
         return success_response(UserResponseSerializer(entity).data, request=request)
+
+
+class AdminAuditLogView(APIView):
+    """GET /admin/audit-log/ - list all platform audit events, staff only."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="List platform audit log",
+        description="Returns the 200 most recent audit events across all users. Staff only.",
+        responses={
+            200: OpenApiResponse(description="Audit log entries."),
+            403: OpenApiResponse(description="Not a staff account."),
+        },
+    )
+    def get(self, request: Request) -> Response:
+        """Return the most recent audit events. Staff only."""
+        if not request.user.is_staff:  # type: ignore[union-attr]
+            return error_response(
+                code="ERR_FORBIDDEN",
+                message="Staff access required.",
+                http_status=403,
+                request=request,
+            )
+
+        from apps.users.infrastructure.audit_models import AuditLog
+        from apps.users.infrastructure.models import User as UserModel
+
+        rows = AuditLog.objects.all()[:200]
+
+        user_ids = {str(r.user_id) for r in rows}
+        user_map: dict[str, dict] = {}
+        fields = ("id", "email", "first_name", "last_name", "is_staff", "is_superuser")
+        for u in UserModel.objects.filter(id__in=user_ids).values(*fields):
+            user_map[str(u["id"])] = u
+
+        data = []
+        for row in rows:
+            uid = str(row.user_id)
+            u = user_map.get(uid, {})
+            first = u.get("first_name", "")
+            last = u.get("last_name", "")
+            actor_name = f"{first} {last}".strip() if (first or last) else uid
+            role = "Super Admin" if u.get("is_superuser") else ("Staff" if u.get("is_staff") else "User")
+            data.append({
+                "id": str(row.id),
+                "user_id": uid,
+                "actor_name": actor_name,
+                "actor_email": u.get("email", ""),
+                "actor_role": role,
+                "event_type": row.event_type,
+                "ip_address": row.ip_address,
+                "user_agent": row.user_agent,
+                "metadata": row.metadata,
+                "created_at": row.created_at.isoformat(),
+            })
+
+        return success_response(data, request=request)
+
+
+class AdminIAMAnalyticsView(APIView):
+    """GET /admin/analytics/ - monthly user registration stats for the superadmin dashboard."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Platform user analytics",
+        description="Monthly user registration series and 30-day growth. Staff only.",
+        responses={200: OpenApiResponse(description="Aggregated user analytics.")},
+    )
+    def get(self, request: Request) -> Response:
+        """Return monthly user counts and 30D growth. Staff only."""
+        if not request.user.is_staff:  # type: ignore[union-attr]
+            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
+
+        from datetime import datetime, timedelta, timezone
+
+        from django.db.models import Count
+        from django.db.models.functions import TruncMonth
+
+        from apps.users.infrastructure.models import User as UserModel
+
+        now = datetime.now(timezone.utc)
+        d30 = now - timedelta(days=30)
+        d60 = now - timedelta(days=60)
+        d365 = now - timedelta(days=365)
+
+        regular_qs = UserModel.objects.filter(is_superuser=False)
+        new_30d = regular_qs.filter(date_joined__gte=d30).count()
+        prev_30d = regular_qs.filter(date_joined__gte=d60, date_joined__lt=d30).count()
+        total = regular_qs.count()
+
+        monthly_qs = (
+            regular_qs.filter(date_joined__gte=d365)
+            .annotate(month=TruncMonth("date_joined"))
+            .values("month")
+            .annotate(count=Count("id"))
+            .order_by("month")
+        )
+        month_map = {row["month"].strftime("%Y-%m"): row["count"] for row in monthly_qs}
+
+        # cumulative series
+        buckets = []
+        for i in range(11, -1, -1):
+            from datetime import timedelta as td
+            dt = now.replace(day=1) - td(days=30 * i)
+            key = dt.strftime("%Y-%m")
+            buckets.append(month_map.get(key, 0))
+
+        cumsum, cumulative = 0, []
+        for v in buckets:
+            cumsum += v
+            cumulative.append(cumsum)
+
+        return success_response({
+            "new_users_30d": new_30d,
+            "prev_users_30d": prev_30d,
+            "total_users": total,
+            "monthly_series": cumulative,
+        }, request=request)
