@@ -20,11 +20,17 @@ class JWTTokenService(ITokenService):
     """Generates simplejwt access and refresh token pairs for a given user ID."""
 
     def generate_for_user(self, user_id: uuid.UUID) -> tuple[str, str]:
-        """Return (access_token, refresh_token) strings for the user."""
+        """Return (access_token, refresh_token) with email claim embedded.
+
+        Email is added so downstream services can enforce domain-restricted
+        events without a cross-service DB lookup.
+        """
         from apps.users.infrastructure.models import User
 
         user = User.objects.get(pk=user_id)
         refresh = RefreshToken.for_user(user)
+        refresh["email"] = user.email
+        refresh.access_token["email"] = user.email
         return str(refresh.access_token), str(refresh)
 
 
