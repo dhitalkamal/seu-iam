@@ -19,10 +19,20 @@ from apps.users.application.use_cases.admin_user_management import (
     ListUsersUseCase,
     SuspendUserUseCase,
 )
+from apps.users.application.use_cases.announcements import (
+    CreateAnnouncementUseCase,
+    ListAnnouncementsUseCase,
+)
 from apps.users.application.use_cases.change_password import ChangePasswordUseCase
 from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
 from apps.users.application.use_cases.disable_mfa import DisableMFAUseCase
 from apps.users.application.use_cases.enable_mfa import EnableMFAUseCase
+from apps.users.application.use_cases.feature_flags import (
+    CreateFeatureFlagUseCase,
+    DeleteFeatureFlagUseCase,
+    ListFeatureFlagsUseCase,
+    UpdateFeatureFlagUseCase,
+)
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
 from apps.users.application.use_cases.mfa_challenge import MFAChallengeUseCase
@@ -33,9 +43,11 @@ from apps.users.application.use_cases.resend_verification_otp import ResendVerif
 from apps.users.application.use_cases.setup_mfa import SetupMFAUseCase
 from apps.users.application.use_cases.verify_email import VerifyEmailUseCase
 from apps.users.domain.audit import AuditEventType
+from apps.users.infrastructure.announcement_repository import DjangoAnnouncementRepository
 from apps.users.infrastructure.audit_repository import DjangoAuditLogRepository
 from apps.users.infrastructure.audit_service import AuditService
 from apps.users.infrastructure.event_publisher import RabbitMQEventPublisher
+from apps.users.infrastructure.feature_flag_repository import DjangoFeatureFlagRepository
 from apps.users.infrastructure.otp_service import RedisOTPService
 from apps.users.infrastructure.password_history_service import PasswordHistoryService
 from apps.users.infrastructure.repositories import DjangoUserRepository
@@ -47,8 +59,12 @@ from apps.users.infrastructure.token_service import (
 )
 from apps.users.infrastructure.totp_service import PyOTPService
 from apps.users.presentation.serializers import (
+    AnnouncementRequestSerializer,
+    AnnouncementResponseSerializer,
     ChangePasswordSerializer,
     ConfirmPasswordResetSerializer,
+    FeatureFlagRequestSerializer,
+    FeatureFlagResponseSerializer,
     LoginRequestSerializer,
     LogoutRequestSerializer,
     MFAChallengeSerializer,
@@ -130,18 +146,10 @@ _R400 = OpenApiResponse(
     description="Request contains invalid data (e.g. wrong or expired OTP).",
     response=_ERROR_ENVELOPE,
 )
-_R401 = OpenApiResponse(
-    description="Authentication credentials are missing or invalid.", response=_ERROR_ENVELOPE
-)
-_R403 = OpenApiResponse(
-    description="You do not have permission to perform this action.", response=_ERROR_ENVELOPE
-)
-_R404 = OpenApiResponse(
-    description="The requested resource was not found.", response=_ERROR_ENVELOPE
-)
-_R409 = OpenApiResponse(
-    description="Request conflicts with the current resource state.", response=_ERROR_ENVELOPE
-)
+_R401 = OpenApiResponse(description="Authentication credentials are missing or invalid.", response=_ERROR_ENVELOPE)
+_R403 = OpenApiResponse(description="You do not have permission to perform this action.", response=_ERROR_ENVELOPE)
+_R404 = OpenApiResponse(description="The requested resource was not found.", response=_ERROR_ENVELOPE)
+_R409 = OpenApiResponse(description="Request conflicts with the current resource state.", response=_ERROR_ENVELOPE)
 _R422 = OpenApiResponse(
     description="Payload failed validation. details contains a flat list of {field, message} objects.",
     response=_ERROR_ENVELOPE,
@@ -150,14 +158,10 @@ _R423 = OpenApiResponse(
     description="Account is temporarily locked. details.locked_until contains the unlock timestamp.",
     response=_ERROR_ENVELOPE,
 )
-_R503 = OpenApiResponse(
-    description="One or more dependencies are unavailable.", response=_ERROR_ENVELOPE
-)
+_R503 = OpenApiResponse(description="One or more dependencies are unavailable.", response=_ERROR_ENVELOPE)
 
 
-def _audit(
-    request: Request, user_id: uuid.UUID, event_type: str, metadata: dict | None = None
-) -> None:
+def _audit(request: Request, user_id: uuid.UUID, event_type: str, metadata: dict | None = None) -> None:
     """Write an audit log entry, swallowing persistence errors so they never block responses."""
     AuditService(DjangoAuditLogRepository()).log(request, user_id, event_type, metadata)
 
@@ -209,8 +213,7 @@ class HealthCheckView(APIView):
         tags=["Health"],
         summary="Service health check",
         description=(
-            "Checks connectivity to PostgreSQL, Redis, and RabbitMQ. "
-            "Returns 200 when all dependencies are healthy, 503 when any are down."
+            "Checks connectivity to PostgreSQL, Redis, and RabbitMQ. Returns 200 when all dependencies are healthy, 503 when any are down."
         ),
         auth=[],
         responses={
@@ -247,11 +250,7 @@ class HealthCheckView(APIView):
             "redis": redis_status,
             "rabbitmq": rmq_status,
         }
-        dep_errors: dict = {
-            k: v
-            for k, v in {"database": db_err, "redis": redis_err, "rabbitmq": rmq_err}.items()
-            if v is not None
-        }
+        dep_errors: dict = {k: v for k, v in {"database": db_err, "redis": redis_err, "rabbitmq": rmq_err}.items() if v is not None}
 
         if all(s == "healthy" for s in checks.values()):
             return success_response(
@@ -310,9 +309,7 @@ class RegisterView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        entity = RegisterUseCase(
-            DjangoUserRepository(), RedisOTPService(), RabbitMQEventPublisher()
-        ).execute(
+        entity = RegisterUseCase(DjangoUserRepository(), RedisOTPService(), RabbitMQEventPublisher()).execute(
             email=d["email"],
             password=d["password"],
             first_name=d["first_name"],
@@ -435,9 +432,7 @@ class LogoutView(APIView):
         description="Blacklists the provided refresh token server-side so it cannot be reused.",
         request=LogoutRequestSerializer,
         responses={
-            200: OpenApiResponse(
-                description="Session terminated successfully.", response=_MSG_ENVELOPE
-            ),
+            200: OpenApiResponse(description="Session terminated successfully.", response=_MSG_ENVELOPE),
             400: _R400,
             401: _R401,
             422: _R422,
@@ -469,9 +464,7 @@ class VerifyEmailView(APIView):
         auth=[],
         request=VerifyEmailRequestSerializer,
         responses={
-            200: OpenApiResponse(
-                description="Email verified successfully.", response=_MSG_ENVELOPE
-            ),
+            200: OpenApiResponse(description="Email verified successfully.", response=_MSG_ENVELOPE),
             400: _R400,
             404: _R404,
             409: _R409,
@@ -484,9 +477,7 @@ class VerifyEmailView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        VerifyEmailUseCase(DjangoUserRepository(), RedisOTPService()).execute(
-            email=d["email"], otp=d["otp"]
-        )
+        VerifyEmailUseCase(DjangoUserRepository(), RedisOTPService()).execute(email=d["email"], otp=d["otp"])
         try:
             user = DjangoUserRepository().get_by_email(d["email"])
             _audit(request, user.id, AuditEventType.EMAIL_VERIFIED)
@@ -504,16 +495,11 @@ class ResendVerificationOTPView(APIView):
     @extend_schema(
         tags=["Auth"],
         summary="Resend verification OTP",
-        description=(
-            "Generates a new 8-character OTP and sends it to the email address. "
-            "Any previously issued OTP is overwritten."
-        ),
+        description=("Generates a new 8-character OTP and sends it to the email address. Any previously issued OTP is overwritten."),
         auth=[],
         request=ResendVerificationOTPRequestSerializer,
         responses={
-            200: OpenApiResponse(
-                description="Verification OTP sent to the email address.", response=_MSG_ENVELOPE
-            ),
+            200: OpenApiResponse(description="Verification OTP sent to the email address.", response=_MSG_ENVELOPE),
             404: _R404,
             409: _R409,
             422: _R422,
@@ -524,9 +510,9 @@ class ResendVerificationOTPView(APIView):
         ser = ResendVerificationOTPRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
-        ResendVerificationOTPUseCase(
-            DjangoUserRepository(), RedisOTPService(), RabbitMQEventPublisher()
-        ).execute(email=ser.validated_data["email"])
+        ResendVerificationOTPUseCase(DjangoUserRepository(), RedisOTPService(), RabbitMQEventPublisher()).execute(
+            email=ser.validated_data["email"]
+        )
         return success_response({"message": "Verification OTP sent."}, request=request)
 
 
@@ -547,9 +533,7 @@ class RequestPasswordResetView(APIView):
         auth=[],
         request=RequestPasswordResetSerializer,
         responses={
-            200: OpenApiResponse(
-                description="Password reset OTP sent to the email address.", response=_MSG_ENVELOPE
-            ),
+            200: OpenApiResponse(description="Password reset OTP sent to the email address.", response=_MSG_ENVELOPE),
             401: _R401,
             404: _R404,
             422: _R422,
@@ -560,9 +544,9 @@ class RequestPasswordResetView(APIView):
         ser = RequestPasswordResetSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
-        RequestPasswordResetUseCase(
-            DjangoUserRepository(), RedisOTPService("password_reset"), RabbitMQEventPublisher()
-        ).execute(email=ser.validated_data["email"])
+        RequestPasswordResetUseCase(DjangoUserRepository(), RedisOTPService("password_reset"), RabbitMQEventPublisher()).execute(
+            email=ser.validated_data["email"]
+        )
         try:
             user = DjangoUserRepository().get_by_email(ser.validated_data["email"])
             _audit(request, user.id, AuditEventType.PASSWORD_RESET_REQUESTED)
@@ -611,9 +595,7 @@ class VerifyPasswordResetOTPView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        VerifyPasswordResetOTPUseCase(
-            DjangoUserRepository(), RedisOTPService("password_reset")
-        ).execute(email=d["email"], otp=d["otp"])
+        VerifyPasswordResetOTPUseCase(DjangoUserRepository(), RedisOTPService("password_reset")).execute(email=d["email"], otp=d["otp"])
         return success_response({"message": "OTP is valid."}, request=request)
 
 
@@ -696,9 +678,7 @@ class ChangePasswordView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        ChangePasswordUseCase(
-            DjangoUserRepository(), JWTTokenBlacklistService(), PasswordHistoryService()
-        ).execute(
+        ChangePasswordUseCase(DjangoUserRepository(), JWTTokenBlacklistService(), PasswordHistoryService()).execute(
             user_id=request.user.id,  # type: ignore[attr-defined]
             current_password=d["current_password"],
             new_password=d["new_password"],
@@ -774,9 +754,7 @@ class MFAEnableView(APIView):
         ser = MFACodeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
-        result = EnableMFAUseCase(
-            DjangoUserRepository(), PyOTPService(), BackupCodeService()
-        ).execute(
+        result = EnableMFAUseCase(DjangoUserRepository(), PyOTPService(), BackupCodeService()).execute(
             user_id=request.user.id,  # type: ignore[attr-defined]
             code=ser.validated_data["code"],
         )
@@ -802,9 +780,7 @@ class MFADisableView(APIView):
         ),
         request=MFACodeSerializer,
         responses={
-            200: OpenApiResponse(
-                description="MFA disabled successfully. Secret cleared.", response=_MSG_ENVELOPE
-            ),
+            200: OpenApiResponse(description="MFA disabled successfully. Secret cleared.", response=_MSG_ENVELOPE),
             400: _R400,
             401: _R401,
             409: _R409,
@@ -842,9 +818,7 @@ class MFAChallengeView(APIView):
         auth=[],
         request=MFAChallengeSerializer,
         responses={
-            200: OpenApiResponse(
-                description="TOTP verified. JWT tokens issued.", response=_TOKEN_PAIR_ENVELOPE
-            ),
+            200: OpenApiResponse(description="TOTP verified. JWT tokens issued.", response=_TOKEN_PAIR_ENVELOPE),
             400: _R400,
             401: _R401,
             404: _R404,
@@ -859,9 +833,9 @@ class MFAChallengeView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        result = MFAChallengeUseCase(
-            DjangoUserRepository(), PyOTPService(), JWTTokenService(), BackupCodeService()
-        ).execute(user_id=d["user_id"], code=d["code"])
+        result = MFAChallengeUseCase(DjangoUserRepository(), PyOTPService(), JWTTokenService(), BackupCodeService()).execute(
+            user_id=d["user_id"], code=d["code"]
+        )
 
         if result.refresh_token:
             _create_session(request, result.refresh_token)
@@ -1051,9 +1025,7 @@ class GoogleSocialAuthView(APIView):
         auth=[],
         request=inline_serializer(
             name="GoogleSocialAuthRequest",
-            fields={
-                "id_token": serializers.CharField(help_text="Google ID token from the client SDK.")
-            },
+            fields={"id_token": serializers.CharField(help_text="Google ID token from the client SDK.")},
         ),
         responses={
             200: OpenApiResponse(
@@ -1066,9 +1038,7 @@ class GoogleSocialAuthView(APIView):
                             fields={
                                 "access_token": serializers.CharField(),
                                 "refresh_token": serializers.CharField(),
-                                "is_new_user": serializers.BooleanField(
-                                    help_text="True if a new account was created during this sign-in."
-                                ),
+                                "is_new_user": serializers.BooleanField(help_text="True if a new account was created during this sign-in."),
                             },
                         ),
                         "error": serializers.JSONField(allow_null=True, default=None),
@@ -1090,16 +1060,14 @@ class GoogleSocialAuthView(APIView):
         ser = GoogleSocialAuthSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
-        result = GoogleSocialAuthUseCase(
-            DjangoUserRepository(), GoogleTokenVerifier(), JWTTokenService()
-        ).execute(id_token=ser.validated_data["id_token"])
+        result = GoogleSocialAuthUseCase(DjangoUserRepository(), GoogleTokenVerifier(), JWTTokenService()).execute(
+            id_token=ser.validated_data["id_token"]
+        )
 
         if result.refresh_token:
             _create_session(request, result.refresh_token)
         try:
-            user = DjangoUserRepository().get_by_email(
-                GoogleTokenVerifier().verify(ser.validated_data["id_token"])["email"]
-            )
+            user = DjangoUserRepository().get_by_email(GoogleTokenVerifier().verify(ser.validated_data["id_token"])["email"])
             _audit(
                 request,
                 user.id,
@@ -1233,18 +1201,20 @@ class AdminAuditLogView(APIView):
             last = u.get("last_name", "")
             actor_name = f"{first} {last}".strip() if (first or last) else uid
             role = "Super Admin" if u.get("is_superuser") else ("Staff" if u.get("is_staff") else "User")
-            data.append({
-                "id": str(row.id),
-                "user_id": uid,
-                "actor_name": actor_name,
-                "actor_email": u.get("email", ""),
-                "actor_role": role,
-                "event_type": row.event_type,
-                "ip_address": row.ip_address,
-                "user_agent": row.user_agent,
-                "metadata": row.metadata,
-                "created_at": row.created_at.isoformat(),
-            })
+            data.append(
+                {
+                    "id": str(row.id),
+                    "user_id": uid,
+                    "actor_name": actor_name,
+                    "actor_email": u.get("email", ""),
+                    "actor_role": role,
+                    "event_type": row.event_type,
+                    "ip_address": row.ip_address,
+                    "user_agent": row.user_agent,
+                    "metadata": row.metadata,
+                    "created_at": row.created_at.isoformat(),
+                }
+            )
 
         return success_response(data, request=request)
 
@@ -1295,6 +1265,7 @@ class AdminIAMAnalyticsView(APIView):
         buckets = []
         for i in range(11, -1, -1):
             from datetime import timedelta as td
+
             dt = now.replace(day=1) - td(days=30 * i)
             key = dt.strftime("%Y-%m")
             buckets.append(month_map.get(key, 0))
@@ -1304,9 +1275,182 @@ class AdminIAMAnalyticsView(APIView):
             cumsum += v
             cumulative.append(cumsum)
 
-        return success_response({
-            "new_users_30d": new_30d,
-            "prev_users_30d": prev_30d,
-            "total_users": total,
-            "monthly_series": cumulative,
-        }, request=request)
+        return success_response(
+            {
+                "new_users_30d": new_30d,
+                "prev_users_30d": prev_30d,
+                "total_users": total,
+                "monthly_series": cumulative,
+            },
+            request=request,
+        )
+
+
+class JWKSView(APIView):
+    """Exposes the RSA public key(s) used to verify JWT access tokens."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="JSON Web Key Set",
+        description="Returns the RSA public key(s) used to verify JWT access tokens (RFC 7517).",
+        auth=[],
+        responses={200: OpenApiResponse(description="JWKS document.")},
+    )
+    def get(self, request: Request) -> Response:
+        """Return the public key set; empty when the service uses HS256."""
+        import json
+
+        from jwt.algorithms import RSAAlgorithm
+
+        algorithm: str = settings.SIMPLE_JWT.get("ALGORITHM", "HS256")
+        verifying_key: str = settings.SIMPLE_JWT.get("VERIFYING_KEY", "")
+
+        if algorithm != "RS256" or not verifying_key:
+            return Response({"keys": []})
+
+        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+        from cryptography.hazmat.primitives.serialization import load_pem_public_key
+
+        key_obj = load_pem_public_key(verifying_key.encode())
+        if not isinstance(key_obj, RSAPublicKey):
+            return Response({"keys": []})
+        jwk: dict = json.loads(RSAAlgorithm.to_jwk(key_obj))
+        jwk.setdefault("use", "sig")
+        jwk.setdefault("alg", "RS256")
+        jwk.setdefault("kid", "1")
+        return Response({"keys": [jwk]})
+
+
+class AdminFeatureFlagListView(APIView):
+    """List all platform feature flags or create a new one."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="List feature flags",
+        responses={
+            200: OpenApiResponse(description="Feature flags.", response=FeatureFlagResponseSerializer(many=True)),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+        },
+    )
+    def get(self, request: Request) -> Response:
+        """Return all feature flags ordered by key."""
+        flags = ListFeatureFlagsUseCase(DjangoFeatureFlagRepository()).execute()
+        return success_response(FeatureFlagResponseSerializer(flags, many=True).data, request=request)
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Create feature flag",
+        request=FeatureFlagRequestSerializer,
+        responses={
+            201: OpenApiResponse(description="Flag created.", response=FeatureFlagResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            409: OpenApiResponse(description="Key already exists."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Create and persist a new feature flag."""
+        ser = FeatureFlagRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        result = CreateFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(
+            key=d["key"],
+            name=d["name"],
+            description=d["description"],
+            is_enabled=d["is_enabled"],
+            enabled_plans=d["enabled_plans"],
+            enabled_org_ids=d["enabled_org_ids"],
+        )
+        return created_response(FeatureFlagResponseSerializer(result).data, request=request)
+
+
+class AdminFeatureFlagDetailView(APIView):
+    """Update or delete a specific feature flag by key."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Update feature flag",
+        request=FeatureFlagRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Flag updated.", response=FeatureFlagResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            404: OpenApiResponse(description="Flag not found."),
+        },
+    )
+    def patch(self, request: Request, key: str) -> Response:
+        """Overwrite mutable fields on the feature flag."""
+        ser = FeatureFlagRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        result = UpdateFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(
+            key=key,
+            name=d["name"],
+            description=d["description"],
+            is_enabled=d["is_enabled"],
+            enabled_plans=d["enabled_plans"],
+            enabled_org_ids=d["enabled_org_ids"],
+        )
+        return success_response(FeatureFlagResponseSerializer(result).data, request=request)
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Delete feature flag",
+        request=None,
+        responses={
+            204: OpenApiResponse(description="Flag deleted."),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            404: OpenApiResponse(description="Flag not found."),
+        },
+    )
+    def delete(self, request: Request, key: str) -> Response:
+        """Permanently remove a feature flag."""
+        DeleteFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(key=key)
+        return Response(status=204)
+
+
+class AdminAnnouncementView(APIView):
+    """List all announcements or create a new one."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="List announcements",
+        responses={
+            200: OpenApiResponse(description="Announcements.", response=AnnouncementResponseSerializer(many=True)),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+        },
+    )
+    def get(self, request: Request) -> Response:
+        """Return all announcements ordered by created_at descending."""
+        items = ListAnnouncementsUseCase(DjangoAnnouncementRepository()).execute()
+        return success_response(AnnouncementResponseSerializer(items, many=True).data, request=request)
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Create announcement",
+        request=AnnouncementRequestSerializer,
+        responses={
+            201: OpenApiResponse(description="Announcement created.", response=AnnouncementResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Create and persist a new platform announcement."""
+        ser = AnnouncementRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        result = CreateAnnouncementUseCase(DjangoAnnouncementRepository()).execute(
+            title=d["title"],
+            body=d["body"],
+            target_plans=d["target_plans"],
+            is_active=d["is_active"],
+            scheduled_at=d["scheduled_at"],
+        )
+        return created_response(AnnouncementResponseSerializer(result).data, request=request)

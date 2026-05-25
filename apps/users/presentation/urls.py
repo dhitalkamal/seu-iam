@@ -16,7 +16,10 @@ from apps.users.presentation.compliance_views import (
     RevokeSessionView,
 )
 from apps.users.presentation.views import (
+    AdminAnnouncementView,
     AdminAuditLogView,
+    AdminFeatureFlagDetailView,
+    AdminFeatureFlagListView,
     AdminIAMAnalyticsView,
     AdminUserActivateView,
     AdminUserListView,
@@ -26,6 +29,7 @@ from apps.users.presentation.views import (
     GoogleSocialAuthView,
     HealthCheckView,
     InternalUserView,
+    JWKSView,
     LoginView,
     LogoutView,
     MFAChallengeView,
@@ -78,6 +82,7 @@ urlpatterns: list[URLPattern] = [
     ),
     # social auth
     path("auth/social/google/", GoogleSocialAuthView.as_view(), name="auth-social-google"),
+    path("auth/jwks/", JWKSView.as_view(), name="auth-jwks"),
     # sessions
     path("auth/sessions/", ListSessionsView.as_view(), name="auth-sessions"),
     path("auth/sessions/<uuid:jti>/", RevokeSessionView.as_view(), name="auth-session-revoke"),
@@ -94,4 +99,7 @@ urlpatterns: list[URLPattern] = [
     path("admin/users/<uuid:user_id>/activate/", AdminUserActivateView.as_view(), name="admin-user-activate"),
     path("admin/audit-log/", AdminAuditLogView.as_view(), name="admin-audit-log"),
     path("admin/analytics/", AdminIAMAnalyticsView.as_view(), name="admin-iam-analytics"),
+    path("admin/feature-flags/", AdminFeatureFlagListView.as_view(), name="admin-feature-flags"),
+    path("admin/feature-flags/<slug:key>/", AdminFeatureFlagDetailView.as_view(), name="admin-feature-flag-detail"),
+    path("admin/announcements/", AdminAnnouncementView.as_view(), name="admin-announcements"),
 ]
