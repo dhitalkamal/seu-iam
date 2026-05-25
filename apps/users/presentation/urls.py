@@ -26,6 +26,7 @@ from apps.users.presentation.views import (
     GoogleSocialAuthView,
     HealthCheckView,
     InternalUserView,
+    JWKSView,
     LoginView,
     LogoutView,
     MFAChallengeView,
@@ -78,6 +79,7 @@ urlpatterns: list[URLPattern] = [
     ),
     # social auth
     path("auth/social/google/", GoogleSocialAuthView.as_view(), name="auth-social-google"),
+    path("auth/jwks/", JWKSView.as_view(), name="auth-jwks"),
     # sessions
     path("auth/sessions/", ListSessionsView.as_view(), name="auth-sessions"),
     path("auth/sessions/<uuid:jti>/", RevokeSessionView.as_view(), name="auth-session-revoke"),
