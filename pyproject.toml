@@ -60,5 +60,6 @@ module = [
     "apps.users.presentation.compliance_views",
     "apps.users.presentation.backup_code_views",
     "apps.common.*",
+    "apps.users.tests.unit.test_superadmin_ip_whitelist",
 ]
 ignore_errors = true

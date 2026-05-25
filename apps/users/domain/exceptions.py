@@ -143,3 +143,10 @@ class AnnouncementNotFoundError(DomainError):
 
     http_status = 404
     code = "ERR_ANNOUNCEMENT_NOT_FOUND"
+
+
+class MFAPhoneRequiredError(DomainError):
+    """A phone number is required to enable SMS MFA but none is set on the profile."""
+
+    http_status = 422
+    code = "ERR_AUTH_MFA_PHONE_REQUIRED"
