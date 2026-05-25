@@ -234,3 +234,26 @@ class FeatureFlagResponseSerializer(serializers.Serializer):
     enabled_org_ids = serializers.ListField(child=serializers.CharField())
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
+
+
+class AnnouncementRequestSerializer(serializers.Serializer):
+    """Payload for creating a platform announcement."""
+
+    title = serializers.CharField(max_length=300)
+    body = serializers.CharField()
+    target_plans = serializers.ListField(child=serializers.CharField(), default=list)
+    is_active = serializers.BooleanField(default=False)
+    scheduled_at = serializers.DateTimeField(allow_null=True, required=False, default=None)
+
+
+class AnnouncementResponseSerializer(serializers.Serializer):
+    """Read-only shape returned for an announcement."""
+
+    id = serializers.UUIDField()
+    title = serializers.CharField()
+    body = serializers.CharField()
+    target_plans = serializers.ListField(child=serializers.CharField())
+    is_active = serializers.BooleanField()
+    scheduled_at = serializers.DateTimeField(allow_null=True)
+    published_at = serializers.DateTimeField(allow_null=True)
+    created_at = serializers.DateTimeField()

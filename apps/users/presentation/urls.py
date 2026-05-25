@@ -16,6 +16,7 @@ from apps.users.presentation.compliance_views import (
     RevokeSessionView,
 )
 from apps.users.presentation.views import (
+    AdminAnnouncementView,
     AdminAuditLogView,
     AdminFeatureFlagDetailView,
     AdminFeatureFlagListView,
@@ -100,4 +101,5 @@ urlpatterns: list[URLPattern] = [
     path("admin/analytics/", AdminIAMAnalyticsView.as_view(), name="admin-iam-analytics"),
     path("admin/feature-flags/", AdminFeatureFlagListView.as_view(), name="admin-feature-flags"),
     path("admin/feature-flags/<slug:key>/", AdminFeatureFlagDetailView.as_view(), name="admin-feature-flag-detail"),
+    path("admin/announcements/", AdminAnnouncementView.as_view(), name="admin-announcements"),
 ]

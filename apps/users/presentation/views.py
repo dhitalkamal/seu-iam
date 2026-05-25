@@ -19,6 +19,10 @@ from apps.users.application.use_cases.admin_user_management import (
     ListUsersUseCase,
     SuspendUserUseCase,
 )
+from apps.users.application.use_cases.announcements import (
+    CreateAnnouncementUseCase,
+    ListAnnouncementsUseCase,
+)
 from apps.users.application.use_cases.change_password import ChangePasswordUseCase
 from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
 from apps.users.application.use_cases.disable_mfa import DisableMFAUseCase
@@ -39,6 +43,7 @@ from apps.users.application.use_cases.resend_verification_otp import ResendVerif
 from apps.users.application.use_cases.setup_mfa import SetupMFAUseCase
 from apps.users.application.use_cases.verify_email import VerifyEmailUseCase
 from apps.users.domain.audit import AuditEventType
+from apps.users.infrastructure.announcement_repository import DjangoAnnouncementRepository
 from apps.users.infrastructure.audit_repository import DjangoAuditLogRepository
 from apps.users.infrastructure.audit_service import AuditService
 from apps.users.infrastructure.event_publisher import RabbitMQEventPublisher
@@ -54,6 +59,8 @@ from apps.users.infrastructure.token_service import (
 )
 from apps.users.infrastructure.totp_service import PyOTPService
 from apps.users.presentation.serializers import (
+    AnnouncementRequestSerializer,
+    AnnouncementResponseSerializer,
     ChangePasswordSerializer,
     ConfirmPasswordResetSerializer,
     FeatureFlagRequestSerializer,
@@ -1405,3 +1412,45 @@ class AdminFeatureFlagDetailView(APIView):
         """Permanently remove a feature flag."""
         DeleteFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(key=key)
         return Response(status=204)
+
+
+class AdminAnnouncementView(APIView):
+    """List all announcements or create a new one."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="List announcements",
+        responses={
+            200: OpenApiResponse(description="Announcements.", response=AnnouncementResponseSerializer(many=True)),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+        },
+    )
+    def get(self, request: Request) -> Response:
+        """Return all announcements ordered by created_at descending."""
+        items = ListAnnouncementsUseCase(DjangoAnnouncementRepository()).execute()
+        return success_response(AnnouncementResponseSerializer(items, many=True).data, request=request)
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Create announcement",
+        request=AnnouncementRequestSerializer,
+        responses={
+            201: OpenApiResponse(description="Announcement created.", response=AnnouncementResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Create and persist a new platform announcement."""
+        ser = AnnouncementRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        result = CreateAnnouncementUseCase(DjangoAnnouncementRepository()).execute(
+            title=d["title"],
+            body=d["body"],
+            target_plans=d["target_plans"],
+            is_active=d["is_active"],
+            scheduled_at=d["scheduled_at"],
+        )
+        return created_response(AnnouncementResponseSerializer(result).data, request=request)
