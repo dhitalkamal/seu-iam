@@ -26,7 +26,9 @@ from apps.users.application.use_cases.announcements import (
 from apps.users.application.use_cases.change_password import ChangePasswordUseCase
 from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
 from apps.users.application.use_cases.disable_mfa import DisableMFAUseCase
+from apps.users.application.use_cases.enable_email_mfa import EnableEmailMFAUseCase
 from apps.users.application.use_cases.enable_mfa import EnableMFAUseCase
+from apps.users.application.use_cases.enable_sms_mfa import EnableSMSMFAUseCase
 from apps.users.application.use_cases.feature_flags import (
     CreateFeatureFlagUseCase,
     DeleteFeatureFlagUseCase,
@@ -40,7 +42,9 @@ from apps.users.application.use_cases.profile import GetProfileUseCase, UpdatePr
 from apps.users.application.use_cases.register import RegisterUseCase
 from apps.users.application.use_cases.request_password_reset import RequestPasswordResetUseCase
 from apps.users.application.use_cases.resend_verification_otp import ResendVerificationOTPUseCase
+from apps.users.application.use_cases.setup_email_mfa import SetupEmailMFAUseCase
 from apps.users.application.use_cases.setup_mfa import SetupMFAUseCase
+from apps.users.application.use_cases.setup_sms_mfa import SetupSMSMFAUseCase
 from apps.users.application.use_cases.verify_email import VerifyEmailUseCase
 from apps.users.domain.audit import AuditEventType
 from apps.users.infrastructure.announcement_repository import DjangoAnnouncementRepository
@@ -63,6 +67,7 @@ from apps.users.presentation.serializers import (
     AnnouncementResponseSerializer,
     ChangePasswordSerializer,
     ConfirmPasswordResetSerializer,
+    DisableMFASerializer,
     FeatureFlagRequestSerializer,
     FeatureFlagResponseSerializer,
     LoginRequestSerializer,
@@ -70,6 +75,7 @@ from apps.users.presentation.serializers import (
     MFAChallengeSerializer,
     MFACodeSerializer,
     MFASetupResponseSerializer,
+    OTPConfirmSerializer,
     RegisterRequestSerializer,
     RequestPasswordResetSerializer,
     ResendVerificationOTPRequestSerializer,
@@ -346,6 +352,10 @@ class LoginView(APIView):
                             name="LoginData",
                             fields={
                                 "mfa_required": serializers.BooleanField(),
+                                "mfa_type": serializers.CharField(
+                                    allow_null=True,
+                                    help_text="Populated when mfa_required is true: 'totp', 'sms', or 'email'.",
+                                ),
                                 "user_id": serializers.UUIDField(
                                     allow_null=True,
                                     help_text="Populated only when mfa_required is true.",
@@ -379,7 +389,12 @@ class LoginView(APIView):
         from apps.users.domain.exceptions import AccountLockedError
 
         try:
-            result = LoginUseCase(DjangoUserRepository(), JWTTokenService()).execute(
+            result = LoginUseCase(
+                DjangoUserRepository(),
+                JWTTokenService(),
+                otp_service=RedisOTPService("mfa_login"),
+                event_publisher=RabbitMQEventPublisher(),
+            ).execute(
                 email=d["email"],
                 password=d["password"],
             )
@@ -413,6 +428,7 @@ class LoginView(APIView):
         return success_response(
             {
                 "mfa_required": result.mfa_required,
+                "mfa_type": result.mfa_type,
                 "user_id": str(result.user_id) if result.user_id else None,
                 "access_token": result.access_token,
                 "refresh_token": result.refresh_token,
@@ -767,7 +783,7 @@ class MFAEnableView(APIView):
 
 
 class MFADisableView(APIView):
-    """Disable MFA after verifying a TOTP code."""
+    """Disable MFA after verifying a TOTP code (totp) or current password (sms/email)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -775,10 +791,12 @@ class MFADisableView(APIView):
         tags=["MFA"],
         summary="Disable MFA",
         description=(
-            "Submit a valid 6-digit TOTP code to deactivate MFA and clear the stored secret. "
+            "Deactivate MFA and clear the stored secret. "
+            "TOTP users must supply a valid 6-digit code. "
+            "SMS/email users must supply their current password. "
             "After this, login returns tokens directly without an MFA challenge."
         ),
-        request=MFACodeSerializer,
+        request=DisableMFASerializer,
         responses={
             200: OpenApiResponse(description="MFA disabled successfully. Secret cleared.", response=_MSG_ENVELOPE),
             400: _R400,
@@ -788,13 +806,15 @@ class MFADisableView(APIView):
         },
     )
     def post(self, request: Request) -> Response:
-        """Verify the code and deactivate MFA."""
-        ser = MFACodeSerializer(data=request.data)
+        """Verify the credential appropriate for the MFA type and deactivate MFA."""
+        ser = DisableMFASerializer(data=request.data)
         ser.is_valid(raise_exception=True)
+        d = ser.validated_data
 
         DisableMFAUseCase(DjangoUserRepository(), PyOTPService()).execute(
             user_id=request.user.id,  # type: ignore[attr-defined]
-            code=ser.validated_data["code"],
+            code=d.get("code"),
+            current_password=d.get("current_password"),
         )
         _audit(request, request.user.id, AuditEventType.MFA_DISABLED)  # type: ignore[attr-defined]
         _notify_security(request, "iam.mfa_disabled")
@@ -833,9 +853,13 @@ class MFAChallengeView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        result = MFAChallengeUseCase(DjangoUserRepository(), PyOTPService(), JWTTokenService(), BackupCodeService()).execute(
-            user_id=d["user_id"], code=d["code"]
-        )
+        result = MFAChallengeUseCase(
+            DjangoUserRepository(),
+            PyOTPService(),
+            JWTTokenService(),
+            BackupCodeService(),
+            otp_service=RedisOTPService("mfa_login"),
+        ).execute(user_id=d["user_id"], code=d["code"])
 
         if result.refresh_token:
             _create_session(request, result.refresh_token)
@@ -1322,6 +1346,157 @@ class JWKSView(APIView):
         jwk.setdefault("alg", "RS256")
         jwk.setdefault("kid", "1")
         return Response({"keys": [jwk]})
+
+
+class MFASMSSetupView(APIView):
+    """Initiate SMS MFA setup by sending an OTP to the user's registered phone."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="Initiate SMS MFA setup",
+        description=(
+            "Generates an OTP and dispatches it via SMS to the user's registered phone number. "
+            "Confirm setup by calling POST /auth/mfa/sms/enable/ with the received OTP. "
+            "Requires a phone number on the user profile."
+        ),
+        request=None,
+        responses={
+            200: OpenApiResponse(description="OTP sent via SMS.", response=_MSG_ENVELOPE),
+            400: _R400,
+            401: _R401,
+            409: _R409,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Generate and dispatch the SMS OTP."""
+        SetupSMSMFAUseCase(
+            DjangoUserRepository(),
+            RedisOTPService("mfa_sms_setup"),
+            RabbitMQEventPublisher(),
+        ).execute(user_id=request.user.id)  # type: ignore[attr-defined]
+        return success_response({"message": "OTP sent via SMS."}, request=request)
+
+
+class MFASMSEnableView(APIView):
+    """Confirm SMS MFA setup by verifying the received OTP."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="Enable SMS MFA",
+        description=(
+            "Submit the OTP received via SMS to activate SMS MFA. "
+            "Must be called after POST /auth/mfa/sms/setup/. "
+            "Returns one-time backup codes on success."
+        ),
+        request=OTPConfirmSerializer,
+        responses={
+            200: OpenApiResponse(description="SMS MFA enabled. Backup codes returned.", response=_MSG_ENVELOPE),
+            400: _R400,
+            401: _R401,
+            409: _R409,
+            422: _R422,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify the OTP, activate SMS MFA, and return backup codes."""
+        from apps.users.infrastructure.backup_code_service import BackupCodeService
+
+        ser = OTPConfirmSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        result = EnableSMSMFAUseCase(
+            DjangoUserRepository(),
+            RedisOTPService("mfa_sms_setup"),
+            BackupCodeService(),
+        ).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+            otp=ser.validated_data["otp"],
+        )
+        _audit(request, request.user.id, AuditEventType.MFA_ENABLED)  # type: ignore[attr-defined]
+        _notify_security(request, "iam.mfa_enabled", {"mfa_type": "sms"})
+        return success_response(
+            {"message": "SMS MFA enabled successfully.", "backup_codes": result.backup_codes},
+            request=request,
+        )
+
+
+class MFAEmailSetupView(APIView):
+    """Initiate email MFA setup by sending an OTP to the user's registered email."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="Initiate email MFA setup",
+        description=(
+            "Generates an OTP and dispatches it to the user's email address. "
+            "Confirm setup by calling POST /auth/mfa/email/enable/ with the received OTP. "
+        ),
+        request=None,
+        responses={
+            200: OpenApiResponse(description="OTP sent via email.", response=_MSG_ENVELOPE),
+            400: _R400,
+            401: _R401,
+            409: _R409,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Generate and dispatch the email OTP."""
+        SetupEmailMFAUseCase(
+            DjangoUserRepository(),
+            RedisOTPService("mfa_email_setup"),
+            RabbitMQEventPublisher(),
+        ).execute(user_id=request.user.id)  # type: ignore[attr-defined]
+        return success_response({"message": "OTP sent via email."}, request=request)
+
+
+class MFAEmailEnableView(APIView):
+    """Confirm email MFA setup by verifying the received OTP."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["MFA"],
+        summary="Enable email MFA",
+        description=(
+            "Submit the OTP received via email to activate email MFA. "
+            "Must be called after POST /auth/mfa/email/setup/. "
+            "Returns one-time backup codes on success."
+        ),
+        request=OTPConfirmSerializer,
+        responses={
+            200: OpenApiResponse(description="Email MFA enabled. Backup codes returned.", response=_MSG_ENVELOPE),
+            400: _R400,
+            401: _R401,
+            409: _R409,
+            422: _R422,
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Verify the OTP, activate email MFA, and return backup codes."""
+        from apps.users.infrastructure.backup_code_service import BackupCodeService
+
+        ser = OTPConfirmSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        result = EnableEmailMFAUseCase(
+            DjangoUserRepository(),
+            RedisOTPService("mfa_email_setup"),
+            BackupCodeService(),
+        ).execute(
+            user_id=request.user.id,  # type: ignore[attr-defined]
+            otp=ser.validated_data["otp"],
+        )
+        _audit(request, request.user.id, AuditEventType.MFA_ENABLED)  # type: ignore[attr-defined]
+        _notify_security(request, "iam.mfa_enabled", {"mfa_type": "email"})
+        return success_response(
+            {"message": "Email MFA enabled successfully.", "backup_codes": result.backup_codes},
+            request=request,
+        )
 
 
 class AdminFeatureFlagListView(APIView):

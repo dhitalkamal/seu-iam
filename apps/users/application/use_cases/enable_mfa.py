@@ -48,6 +48,7 @@ class EnableMFAUseCase:
             raise InvalidTOTPError("Invalid or expired TOTP code.")
 
         user.mfa_enabled = True
+        user.mfa_type = "totp"
         self._users.update(user)
 
         if self._backup is not None:

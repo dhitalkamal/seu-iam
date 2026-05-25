@@ -33,6 +33,7 @@ class LoginResponseSerializer(serializers.Serializer):
     """Login outcome: tokens for a normal login, or an MFA challenge signal."""
 
     mfa_required = serializers.BooleanField()
+    mfa_type = serializers.CharField(allow_null=True)
     user_id = serializers.UUIDField(allow_null=True)
     access_token = serializers.CharField(allow_null=True)
     refresh_token = serializers.CharField(allow_null=True)
@@ -140,6 +141,19 @@ class MFACodeSerializer(serializers.Serializer):
     """Payload carrying a 6-digit TOTP code."""
 
     code = serializers.CharField(min_length=6, max_length=6)
+
+
+class DisableMFASerializer(serializers.Serializer):
+    """Payload for disabling MFA. TOTP users supply code; SMS/email users supply current_password."""
+
+    code = serializers.CharField(min_length=6, max_length=6, required=False, allow_null=True)
+    current_password = serializers.CharField(write_only=True, required=False, allow_null=True)
+
+
+class OTPConfirmSerializer(serializers.Serializer):
+    """Payload for confirming SMS or email MFA setup with the received OTP."""
+
+    otp = serializers.CharField(min_length=8, max_length=8)
 
 
 class MFAChallengeSerializer(serializers.Serializer):
