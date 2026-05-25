@@ -49,6 +49,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     mfa_enabled = models.BooleanField(default=False)
     mfa_secret = models.CharField(max_length=64, blank=True, null=True)
+    mfa_type = models.CharField(max_length=16, blank=True, null=True)
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -73,6 +74,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             is_superuser=self.is_superuser,
             mfa_enabled=self.mfa_enabled,
             mfa_secret=self.mfa_secret,
+            mfa_type=self.mfa_type,
             failed_login_attempts=self.failed_login_attempts,
             date_joined=self.date_joined,
             updated_at=self.updated_at,
@@ -100,6 +102,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             is_superuser=entity.is_superuser,
             mfa_enabled=entity.mfa_enabled,
             mfa_secret=entity.mfa_secret,
+            mfa_type=entity.mfa_type,
             failed_login_attempts=entity.failed_login_attempts,
             locked_until=entity.locked_until,
             deleted_at=entity.deleted_at,

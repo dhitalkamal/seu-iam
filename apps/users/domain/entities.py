@@ -28,6 +28,7 @@ class UserEntity:
     phone: str | None = None
     bio: str | None = None
     mfa_secret: str | None = None
+    mfa_type: str | None = None
     locked_until: datetime | None = None
     deleted_at: datetime | None = None
 

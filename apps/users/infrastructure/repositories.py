@@ -47,6 +47,7 @@ class DjangoUserRepository(IUserRepository):
             is_active=entity.is_active,
             mfa_enabled=entity.mfa_enabled,
             mfa_secret=entity.mfa_secret,
+            mfa_type=entity.mfa_type,
             failed_login_attempts=entity.failed_login_attempts,
             locked_until=entity.locked_until,
             deleted_at=entity.deleted_at,
@@ -56,7 +57,4 @@ class DjangoUserRepository(IUserRepository):
 
     def list_all(self) -> list[UserEntity]:
         """Return all non-deleted users ordered newest first."""
-        return [
-            u.to_entity()
-            for u in User.objects.filter(deleted_at__isnull=True).order_by("-date_joined")
-        ]
+        return [u.to_entity() for u in User.objects.filter(deleted_at__isnull=True).order_by("-date_joined")]
