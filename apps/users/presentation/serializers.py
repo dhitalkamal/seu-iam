@@ -210,3 +210,27 @@ class InternalUserSerializer(serializers.Serializer):
     full_name = serializers.CharField()
     avatar_url = serializers.URLField(allow_null=True)
     is_active = serializers.BooleanField()
+
+
+class FeatureFlagRequestSerializer(serializers.Serializer):
+    """Payload for creating or updating a feature flag."""
+
+    key = serializers.SlugField(max_length=100)
+    name = serializers.CharField(max_length=200)
+    description = serializers.CharField(default="", allow_blank=True)
+    is_enabled = serializers.BooleanField(default=False)
+    enabled_plans = serializers.ListField(child=serializers.CharField(), default=list)
+    enabled_org_ids = serializers.ListField(child=serializers.CharField(), default=list)
+
+
+class FeatureFlagResponseSerializer(serializers.Serializer):
+    """Read-only shape returned for a feature flag."""
+
+    key = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    is_enabled = serializers.BooleanField()
+    enabled_plans = serializers.ListField(child=serializers.CharField())
+    enabled_org_ids = serializers.ListField(child=serializers.CharField())
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()

@@ -23,6 +23,12 @@ from apps.users.application.use_cases.change_password import ChangePasswordUseCa
 from apps.users.application.use_cases.confirm_password_reset import ConfirmPasswordResetUseCase
 from apps.users.application.use_cases.disable_mfa import DisableMFAUseCase
 from apps.users.application.use_cases.enable_mfa import EnableMFAUseCase
+from apps.users.application.use_cases.feature_flags import (
+    CreateFeatureFlagUseCase,
+    DeleteFeatureFlagUseCase,
+    ListFeatureFlagsUseCase,
+    UpdateFeatureFlagUseCase,
+)
 from apps.users.application.use_cases.login import LoginUseCase
 from apps.users.application.use_cases.logout import LogoutUseCase
 from apps.users.application.use_cases.mfa_challenge import MFAChallengeUseCase
@@ -36,6 +42,7 @@ from apps.users.domain.audit import AuditEventType
 from apps.users.infrastructure.audit_repository import DjangoAuditLogRepository
 from apps.users.infrastructure.audit_service import AuditService
 from apps.users.infrastructure.event_publisher import RabbitMQEventPublisher
+from apps.users.infrastructure.feature_flag_repository import DjangoFeatureFlagRepository
 from apps.users.infrastructure.otp_service import RedisOTPService
 from apps.users.infrastructure.password_history_service import PasswordHistoryService
 from apps.users.infrastructure.repositories import DjangoUserRepository
@@ -49,6 +56,8 @@ from apps.users.infrastructure.totp_service import PyOTPService
 from apps.users.presentation.serializers import (
     ChangePasswordSerializer,
     ConfirmPasswordResetSerializer,
+    FeatureFlagRequestSerializer,
+    FeatureFlagResponseSerializer,
     LoginRequestSerializer,
     LogoutRequestSerializer,
     MFAChallengeSerializer,
@@ -1306,3 +1315,93 @@ class JWKSView(APIView):
         jwk.setdefault("alg", "RS256")
         jwk.setdefault("kid", "1")
         return Response({"keys": [jwk]})
+
+
+class AdminFeatureFlagListView(APIView):
+    """List all platform feature flags or create a new one."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="List feature flags",
+        responses={
+            200: OpenApiResponse(description="Feature flags.", response=FeatureFlagResponseSerializer(many=True)),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+        },
+    )
+    def get(self, request: Request) -> Response:
+        """Return all feature flags ordered by key."""
+        flags = ListFeatureFlagsUseCase(DjangoFeatureFlagRepository()).execute()
+        return success_response(FeatureFlagResponseSerializer(flags, many=True).data, request=request)
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Create feature flag",
+        request=FeatureFlagRequestSerializer,
+        responses={
+            201: OpenApiResponse(description="Flag created.", response=FeatureFlagResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            409: OpenApiResponse(description="Key already exists."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Create and persist a new feature flag."""
+        ser = FeatureFlagRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        result = CreateFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(
+            key=d["key"],
+            name=d["name"],
+            description=d["description"],
+            is_enabled=d["is_enabled"],
+            enabled_plans=d["enabled_plans"],
+            enabled_org_ids=d["enabled_org_ids"],
+        )
+        return created_response(FeatureFlagResponseSerializer(result).data, request=request)
+
+
+class AdminFeatureFlagDetailView(APIView):
+    """Update or delete a specific feature flag by key."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Update feature flag",
+        request=FeatureFlagRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Flag updated.", response=FeatureFlagResponseSerializer),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            404: OpenApiResponse(description="Flag not found."),
+        },
+    )
+    def patch(self, request: Request, key: str) -> Response:
+        """Overwrite mutable fields on the feature flag."""
+        ser = FeatureFlagRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        result = UpdateFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(
+            key=key,
+            name=d["name"],
+            description=d["description"],
+            is_enabled=d["is_enabled"],
+            enabled_plans=d["enabled_plans"],
+            enabled_org_ids=d["enabled_org_ids"],
+        )
+        return success_response(FeatureFlagResponseSerializer(result).data, request=request)
+
+    @extend_schema(
+        tags=["Admin"],
+        summary="Delete feature flag",
+        request=None,
+        responses={
+            204: OpenApiResponse(description="Flag deleted."),
+            401: OpenApiResponse(description="Missing or invalid JWT."),
+            404: OpenApiResponse(description="Flag not found."),
+        },
+    )
+    def delete(self, request: Request, key: str) -> Response:
+        """Permanently remove a feature flag."""
+        DeleteFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(key=key)
+        return Response(status=204)

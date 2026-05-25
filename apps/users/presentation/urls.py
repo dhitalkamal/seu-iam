@@ -17,6 +17,8 @@ from apps.users.presentation.compliance_views import (
 )
 from apps.users.presentation.views import (
     AdminAuditLogView,
+    AdminFeatureFlagDetailView,
+    AdminFeatureFlagListView,
     AdminIAMAnalyticsView,
     AdminUserActivateView,
     AdminUserListView,
@@ -96,4 +98,6 @@ urlpatterns: list[URLPattern] = [
     path("admin/users/<uuid:user_id>/activate/", AdminUserActivateView.as_view(), name="admin-user-activate"),
     path("admin/audit-log/", AdminAuditLogView.as_view(), name="admin-audit-log"),
     path("admin/analytics/", AdminIAMAnalyticsView.as_view(), name="admin-iam-analytics"),
+    path("admin/feature-flags/", AdminFeatureFlagListView.as_view(), name="admin-feature-flags"),
+    path("admin/feature-flags/<slug:key>/", AdminFeatureFlagDetailView.as_view(), name="admin-feature-flag-detail"),
 ]
