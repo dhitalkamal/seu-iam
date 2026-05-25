@@ -122,3 +122,24 @@ class NoBackupCodesError(DomainError):
 
     http_status = 400
     code = "ERR_AUTH_NO_BACKUP_CODES"
+
+
+class FeatureFlagNotFoundError(DomainError):
+    """No feature flag with that key exists."""
+
+    http_status = 404
+    code = "ERR_FEATURE_FLAG_NOT_FOUND"
+
+
+class FeatureFlagAlreadyExistsError(DomainError):
+    """A feature flag with that key already exists."""
+
+    http_status = 409
+    code = "ERR_FEATURE_FLAG_ALREADY_EXISTS"
+
+
+class AnnouncementNotFoundError(DomainError):
+    """No announcement with that ID exists."""
+
+    http_status = 404
+    code = "ERR_ANNOUNCEMENT_NOT_FOUND"

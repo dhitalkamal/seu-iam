@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 
-from apps.users.domain.entities import UserEntity
+from apps.users.domain.entities import AnnouncementEntity, FeatureFlagEntity, UserEntity
 
 
 class IUserRepository(ABC):
@@ -132,3 +132,38 @@ class ITOTPService(ABC):
     def verify_code(self, secret: str, code: str) -> bool:
         """Return True if code is valid for the given secret at the current time."""
         ...
+
+
+class IFeatureFlagRepository(ABC):
+    """Persistence contract for FeatureFlag aggregates."""
+
+    @abstractmethod
+    def list_all(self) -> list[FeatureFlagEntity]: ...
+
+    @abstractmethod
+    def get_by_key(self, key: str) -> FeatureFlagEntity: ...
+
+    @abstractmethod
+    def exists_by_key(self, key: str) -> bool: ...
+
+    @abstractmethod
+    def create(self, entity: FeatureFlagEntity) -> FeatureFlagEntity: ...
+
+    @abstractmethod
+    def update(self, entity: FeatureFlagEntity) -> FeatureFlagEntity: ...
+
+    @abstractmethod
+    def delete(self, key: str) -> None: ...
+
+
+class IAnnouncementRepository(ABC):
+    """Persistence contract for Announcement aggregates."""
+
+    @abstractmethod
+    def list_all(self) -> list[AnnouncementEntity]: ...
+
+    @abstractmethod
+    def get_by_id(self, announcement_id: uuid.UUID) -> AnnouncementEntity: ...
+
+    @abstractmethod
+    def create(self, entity: AnnouncementEntity) -> AnnouncementEntity: ...
