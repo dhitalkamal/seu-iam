@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from apps.common.api.responses import created_response, error_response, success_response
 from apps.common.health import check_database, check_rabbitmq, check_redis
+from apps.common.permissions import IsSuperAdminFromAllowedIP
 from apps.users.application.use_cases.admin_user_management import (
     ActivateUserUseCase,
     ListUsersUseCase,
@@ -1090,7 +1091,7 @@ class GoogleSocialAuthView(APIView):
 class AdminUserListView(APIView):
     """Superadmin: list all platform users."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1104,8 +1105,6 @@ class AdminUserListView(APIView):
     )
     def get(self, request: Request) -> Response:
         """Return all users. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
         users = ListUsersUseCase(DjangoUserRepository()).execute()
         return success_response(UserResponseSerializer(users, many=True).data, request=request)
 
@@ -1113,7 +1112,7 @@ class AdminUserListView(APIView):
 class AdminUserSuspendView(APIView):
     """Superadmin: suspend a user account."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1128,8 +1127,6 @@ class AdminUserSuspendView(APIView):
     )
     def post(self, request: Request, user_id: uuid.UUID) -> Response:
         """Set is_active=False on the given user. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
         entity = SuspendUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
         return success_response(UserResponseSerializer(entity).data, request=request)
 
@@ -1137,7 +1134,7 @@ class AdminUserSuspendView(APIView):
 class AdminUserActivateView(APIView):
     """Superadmin: activate a suspended user account."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1152,8 +1149,6 @@ class AdminUserActivateView(APIView):
     )
     def post(self, request: Request, user_id: uuid.UUID) -> Response:
         """Set is_active=True on the given user. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
         entity = ActivateUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
         return success_response(UserResponseSerializer(entity).data, request=request)
 
@@ -1161,7 +1156,7 @@ class AdminUserActivateView(APIView):
 class AdminAuditLogView(APIView):
     """GET /admin/audit-log/ - list all platform audit events, staff only."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1174,14 +1169,6 @@ class AdminAuditLogView(APIView):
     )
     def get(self, request: Request) -> Response:
         """Return the most recent audit events. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(
-                code="ERR_FORBIDDEN",
-                message="Staff access required.",
-                http_status=403,
-                request=request,
-            )
-
         from apps.users.infrastructure.audit_models import AuditLog
         from apps.users.infrastructure.models import User as UserModel
 
@@ -1222,7 +1209,7 @@ class AdminAuditLogView(APIView):
 class AdminIAMAnalyticsView(APIView):
     """GET /admin/analytics/ - monthly user registration stats for the superadmin dashboard."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1232,9 +1219,6 @@ class AdminIAMAnalyticsView(APIView):
     )
     def get(self, request: Request) -> Response:
         """Return monthly user counts and 30D growth. Staff only."""
-        if not request.user.is_staff:  # type: ignore[union-attr]
-            return error_response(code="ERR_FORBIDDEN", message="Staff access required.", http_status=403, request=request)
-
         from datetime import datetime, timedelta, timezone
 
         from django.db.models import Count
@@ -1327,7 +1311,7 @@ class JWKSView(APIView):
 class AdminFeatureFlagListView(APIView):
     """List all platform feature flags or create a new one."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1371,7 +1355,7 @@ class AdminFeatureFlagListView(APIView):
 class AdminFeatureFlagDetailView(APIView):
     """Update or delete a specific feature flag by key."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
@@ -1417,7 +1401,7 @@ class AdminFeatureFlagDetailView(APIView):
 class AdminAnnouncementView(APIView):
     """List all announcements or create a new one."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSuperAdminFromAllowedIP]
 
     @extend_schema(
         tags=["Admin"],
