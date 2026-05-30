@@ -74,23 +74,28 @@ class UpdateFeatureFlagUseCase:
         self,
         *,
         key: str,
-        name: str,
-        description: str,
-        is_enabled: bool,
-        enabled_plans: list[str],
-        enabled_org_ids: list[str],
+        name: str | None = None,
+        description: str | None = None,
+        is_enabled: bool | None = None,
+        enabled_plans: list[str] | None = None,
+        enabled_org_ids: list[str] | None = None,
     ) -> FeatureFlagEntity:
         """
-        Overwrite all mutable fields on the flag.
+        Partial update - only overwrites fields that are provided.
 
         Raises FeatureFlagNotFoundError if the key does not exist.
         """
         flag = self._repo.get_by_key(key)
-        flag.name = name
-        flag.description = description
-        flag.is_enabled = is_enabled
-        flag.enabled_plans = enabled_plans
-        flag.enabled_org_ids = enabled_org_ids
+        if name is not None:
+            flag.name = name
+        if description is not None:
+            flag.description = description
+        if is_enabled is not None:
+            flag.is_enabled = is_enabled
+        if enabled_plans is not None:
+            flag.enabled_plans = enabled_plans
+        if enabled_org_ids is not None:
+            flag.enabled_org_ids = enabled_org_ids
         flag.updated_at = _now()
         return self._repo.update(flag)
 

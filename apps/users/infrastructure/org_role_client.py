@@ -52,7 +52,7 @@ class OrgRoleClient:
 
     def _fetch_from_api(self, user_id: uuid.UUID) -> dict[str, str]:
         """Call management-service internal endpoint."""
-        url = f"{settings.MANAGEMENT_SERVICE_URL}/api/v1/organisations/internal/users/{user_id}/org-roles/"
+        url = f"{settings.MANAGEMENT_SERVICE_URL}/api/v1/organizations/internal/users/{user_id}/org-roles/"
         try:
             resp = requests.get(url, timeout=_REQUEST_TIMEOUT)
             if resp.status_code == 200:

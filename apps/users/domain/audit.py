@@ -33,8 +33,9 @@ class IAuditLogRepository:
 
 
 class AuditEventType:
-    """Centralised registry of audit event type strings."""
+    """Centralized registry of audit event type strings."""
 
+    # * user / auth
     USER_REGISTERED = "user.registered"
     LOGIN_SUCCESS = "user.login_success"
     LOGIN_FAILED = "user.login_failed"
@@ -42,6 +43,7 @@ class AuditEventType:
     LOGIN_MFA_SUCCESS = "user.login_mfa_success"
     LOGOUT = "user.logout"
     SOCIAL_AUTH_GOOGLE = "user.social_auth_google"
+    SOCIAL_AUTH_GITHUB = "user.social_auth_github"
     PASSWORD_CHANGED = "user.password_changed"
     PASSWORD_RESET_REQUESTED = "user.password_reset_requested"
     PASSWORD_RESET_COMPLETED = "user.password_reset_completed"
@@ -55,3 +57,79 @@ class AuditEventType:
     GDPR_EXPORT_REQUESTED = "user.gdpr_export_requested"
     GDPR_ERASURE_COMPLETED = "user.gdpr_erasure_completed"
     ACCOUNT_DELETED = "user.account_deleted"
+    USER_SUSPENDED = "user.suspended"
+    USER_ACTIVATED = "user.activated"
+
+    # * events
+    EVENT_CREATED = "event.created"
+    EVENT_UPDATED = "event.updated"
+    EVENT_PUBLISHED = "event.published"
+    EVENT_COMPLETED = "event.completed"
+    EVENT_DELETED = "event.deleted"
+    CATEGORY_CREATED = "category.created"
+    TAG_CREATED = "tag.created"
+
+    # * organizations
+    ORG_CREATED = "org.created"
+    ORG_UPDATED = "org.updated"
+    ORG_APPROVED = "org.approved"
+    ORG_REJECTED = "org.rejected"
+    ORG_SUSPENDED = "org.suspended"
+    ORG_REINSTATED = "org.reinstated"
+    ORG_DELETED = "org.deleted"
+    ORG_MEMBER_ADDED = "org.member.added"
+    ORG_MEMBER_REMOVED = "org.member.removed"
+    ORG_INVITE_SENT = "org.invite.sent"
+    ORG_INVITE_ACCEPTED = "org.invite.accepted"
+
+    # * venues
+    VENUE_CREATED = "venue.created"
+    VENUE_UPDATED = "venue.updated"
+    VENUE_DELETED = "venue.deleted"
+    VENUE_BOOKING_CREATED = "venue.booking.created"
+    VENUE_BOOKING_CANCELLED = "venue.booking.cancelled"
+
+    # * community
+    COMMUNITY_CREATED = "community.created"
+    POST_CREATED = "post.created"
+    POST_DELETED = "post.deleted"
+
+    # * volunteers
+    VOLUNTEER_ROLE_CREATED = "volunteer.role.created"
+    VOLUNTEER_APPLICATION_SUBMITTED = "volunteer.application.submitted"
+    VOLUNTEER_APPLICATION_APPROVED = "volunteer.application.approved"
+    VOLUNTEER_APPLICATION_REJECTED = "volunteer.application.rejected"
+    VOLUNTEER_SHIFT_CREATED = "volunteer.shift.created"
+
+    # * marketing
+    CAMPAIGN_CREATED = "campaign.created"
+    CAMPAIGN_SENT = "campaign.sent"
+
+    # * moderation
+    MODERATION_CASE_CREATED = "moderation.case.created"
+    MODERATION_CASE_UPDATED = "moderation.case.updated"
+
+    # * compliance
+    COMPLIANCE_CONTROL_CREATED = "compliance.control.created"
+    COMPLIANCE_CONTROL_UPDATED = "compliance.control.updated"
+
+    # * participation
+    REGISTRATION_CREATED = "registration.created"
+    REGISTRATION_CANCELLED = "registration.cancelled"
+    CHECKIN_COMPLETED = "checkin.completed"
+    TRANSFER_INITIATED = "transfer.initiated"
+    TRANSFER_ACCEPTED = "transfer.accepted"
+
+    # * payments
+    ORDER_CREATED = "order.created"
+    ORDER_COMPLETED = "order.completed"
+    REFUND_REQUESTED = "refund.requested"
+    SUBSCRIPTION_CREATED = "subscription.created"
+    SUBSCRIPTION_CANCELLED = "subscription.cancelled"
+    PROMO_CREATED = "promo.created"
+    DISPUTE_CREATED = "dispute.created"
+    DISPUTE_UPDATED = "dispute.updated"
+
+    # * notifications
+    PREFERENCE_UPDATED = "notification.preference.updated"
+    DIGEST_CREATED = "notification.digest.created"

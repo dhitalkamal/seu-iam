@@ -31,3 +31,21 @@ class Command(BaseCommand):
             last_name=DEFAULT_LAST,
         )
         self.stdout.write(self.style.SUCCESS(f"created superadmin: {DEFAULT_EMAIL}"))
+
+        self._seed_feature_flags()
+
+    def _seed_feature_flags(self) -> None:
+        """Create the maintenance_mode flag if it doesn't exist."""
+        from apps.users.infrastructure.feature_flag_models import FeatureFlagModel as FeatureFlag
+
+        _, created = FeatureFlag.objects.get_or_create(
+            key="maintenance_mode",
+            defaults={
+                "key": "maintenance_mode",
+                "name": "Maintenance mode",
+                "description": "Show maintenance page to all users",
+                "is_enabled": False,
+            },
+        )
+        if created:
+            self.stdout.write("  seeded flag: maintenance_mode")

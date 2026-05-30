@@ -10,6 +10,7 @@ from collections.abc import Callable
 
 from django.core.management.base import BaseCommand
 
+from apps.users.infrastructure.audit_models import AuditLog
 from apps.users.infrastructure.org_role_client import OrgRoleClient
 
 logger = logging.getLogger(__name__)
@@ -34,11 +35,39 @@ def _handle_member_event(payload: dict) -> None:
     logger.info("Invalidated org role cache for user %s.", user_id)
 
 
+def _handle_audit_event(payload: dict) -> None:
+    """Write a cross-service audit entry to iam_audit_log.
+
+    Expected payload keys: user_id, event_type, ip_address, user_agent, metadata, timestamp.
+    """
+    raw_uid = payload.get("user_id")
+    if not raw_uid:
+        logger.warning("audit.log payload missing user_id, skipping.")
+        return
+    try:
+        user_id = uuid.UUID(str(raw_uid))
+    except ValueError:
+        logger.warning("audit.log payload has invalid user_id %r, skipping.", raw_uid)
+        return
+
+    event_type = payload.get("event_type", "unknown")
+    AuditLog.objects.create(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        event_type=event_type,
+        ip_address=payload.get("ip_address"),
+        user_agent=payload.get("user_agent"),
+        metadata=payload.get("metadata") or {},
+    )
+    logger.info("Audit entry written: %s for user %s.", event_type, user_id)
+
+
 # routing key -> handler function
 _HANDLERS: dict[str, Callable[[dict], None]] = {
     "org.member.added": _handle_member_event,
     "org.member.removed": _handle_member_event,
     "org.member.role_changed": _handle_member_event,
+    "audit.log": _handle_audit_event,
 }
 
 
@@ -70,6 +99,8 @@ class Command(BaseCommand):
             channel.queue_bind(queue="iam.events", exchange="sansaar", routing_key="iam.#")
             # bind org.member.* events for cache invalidation
             channel.queue_bind(queue="iam.events", exchange="sansaar", routing_key="org.member.#")
+            # bind cross-service audit events
+            channel.queue_bind(queue="iam.events", exchange="sansaar", routing_key="audit.log")
             channel.basic_consume(
                 queue="iam.events",
                 on_message_callback=self._on_message,

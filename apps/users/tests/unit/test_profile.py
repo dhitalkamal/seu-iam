@@ -96,9 +96,9 @@ def test_update_profile_changes_bio():
     user = make_user()
     repo = FakeUserRepository([user])
 
-    updated = UpdateProfileUseCase(repo).execute(user.id, bio="Event organiser from Kathmandu.")
+    updated = UpdateProfileUseCase(repo).execute(user.id, bio="Event organizer from Kathmandu.")
 
-    assert updated.bio == "Event organiser from Kathmandu."
+    assert updated.bio == "Event organizer from Kathmandu."
 
 
 def test_update_profile_phone_and_bio_default_none():

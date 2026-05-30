@@ -40,6 +40,7 @@ from apps.users.presentation.views import (
     MFASetupView,
     MFASMSEnableView,
     MFASMSSetupView,
+    PlatformStatusView,
     ProfileView,
     RegisterView,
     RequestPasswordResetView,
@@ -50,6 +51,7 @@ from apps.users.presentation.views import (
 
 urlpatterns: list[URLPattern] = [
     path("health/", HealthCheckView.as_view(), name="health"),
+    path("platform/status/", PlatformStatusView.as_view(), name="platform-status"),
     # auth
     path("auth/register/", RegisterView.as_view(), name="auth-register"),
     path("auth/login/", LoginView.as_view(), name="auth-login"),

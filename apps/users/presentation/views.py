@@ -71,6 +71,7 @@ from apps.users.presentation.serializers import (
     DisableMFASerializer,
     FeatureFlagRequestSerializer,
     FeatureFlagResponseSerializer,
+    FeatureFlagUpdateSerializer,
     LoginRequestSerializer,
     LogoutRequestSerializer,
     MFAChallengeSerializer,
@@ -279,6 +280,30 @@ class HealthCheckView(APIView):
         )
 
 
+class PlatformStatusView(APIView):
+    """Public endpoint that returns platform-wide flags like maintenance mode."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Platform"],
+        summary="Platform status",
+        description="Returns platform status flags. No authentication required.",
+        auth=[],
+        responses={200: OpenApiResponse(description="Platform status.")},
+    )
+    def get(self, request: Request) -> Response:
+        """Check if maintenance_mode flag is enabled."""
+        repo = DjangoFeatureFlagRepository()
+        try:
+            flag = repo.get_by_key("maintenance_mode")
+            maintenance = flag.is_enabled
+        except Exception:
+            maintenance = False
+        return success_response({"maintenance": maintenance}, request=request)
+
+
 class RegisterView(APIView):
     """Create a new unverified user account and dispatch an email verification OTP."""
 
@@ -389,7 +414,7 @@ class LoginView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        from apps.users.domain.exceptions import AccountLockedError
+        from apps.users.domain.exceptions import AccountLockedError, InvalidCredentialsError
 
         try:
             result = LoginUseCase(
@@ -406,6 +431,7 @@ class LoginView(APIView):
                 from apps.users.infrastructure.audit_service import _get_ip
 
                 user = DjangoUserRepository().get_by_email(d["email"].lower().strip())
+                _audit(request, user.id, AuditEventType.ACCOUNT_LOCKED, {"email": user.email})
                 RabbitMQEventPublisher().publish(
                     "iam.account_locked",
                     {
@@ -416,6 +442,14 @@ class LoginView(APIView):
                         "ip_address": _get_ip(request),
                     },
                 )
+            except Exception:
+                pass
+            raise
+        except InvalidCredentialsError:
+            # audit failed login attempts for security monitoring
+            try:
+                user = DjangoUserRepository().get_by_email(d["email"].lower().strip())
+                _audit(request, user.id, AuditEventType.LOGIN_FAILED, {"email": d["email"]})
             except Exception:
                 pass
             raise
@@ -1234,6 +1268,7 @@ class AdminUserSuspendView(APIView):
     def post(self, request: Request, user_id: uuid.UUID) -> Response:
         """Set is_active=False on the given user. Staff only."""
         entity = SuspendUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
+        _audit(request, user_id, AuditEventType.USER_SUSPENDED, {"email": entity.email})
         return success_response(UserResponseSerializer(entity).data, request=request)
 
 
@@ -1256,6 +1291,7 @@ class AdminUserActivateView(APIView):
     def post(self, request: Request, user_id: uuid.UUID) -> Response:
         """Set is_active=True on the given user. Staff only."""
         entity = ActivateUserUseCase(DjangoUserRepository()).execute(user_id=user_id)
+        _audit(request, user_id, AuditEventType.USER_ACTIVATED, {"email": entity.email})
         return success_response(UserResponseSerializer(entity).data, request=request)
 
 
@@ -1617,7 +1653,7 @@ class AdminFeatureFlagDetailView(APIView):
     @extend_schema(
         tags=["Admin"],
         summary="Update feature flag",
-        request=FeatureFlagRequestSerializer,
+        request=FeatureFlagUpdateSerializer,
         responses={
             200: OpenApiResponse(description="Flag updated.", response=FeatureFlagResponseSerializer),
             401: OpenApiResponse(description="Missing or invalid JWT."),
@@ -1625,17 +1661,12 @@ class AdminFeatureFlagDetailView(APIView):
         },
     )
     def patch(self, request: Request, key: str) -> Response:
-        """Overwrite mutable fields on the feature flag."""
-        ser = FeatureFlagRequestSerializer(data=request.data)
+        """Partial update on the feature flag - only provided fields are changed."""
+        ser = FeatureFlagUpdateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        d = ser.validated_data
         result = UpdateFeatureFlagUseCase(DjangoFeatureFlagRepository()).execute(
             key=key,
-            name=d["name"],
-            description=d["description"],
-            is_enabled=d["is_enabled"],
-            enabled_plans=d["enabled_plans"],
-            enabled_org_ids=d["enabled_org_ids"],
+            **ser.validated_data,
         )
         return success_response(FeatureFlagResponseSerializer(result).data, request=request)
 
@@ -1697,31 +1728,26 @@ class AdminAnnouncementView(APIView):
         return created_response(AnnouncementResponseSerializer(result).data, request=request)
 
 
-class GithubSocialAuthView(APIView):
-    """Sign in or register with a GitHub OAuth access token."""
+class _GithubSocialAuthViewDuplicate(APIView):
+    """DUPLICATE - kept to avoid import errors. Use the one defined earlier."""
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["Social Auth"],
-        summary="Sign in with GitHub",
-        description=(
-            "Accepts a GitHub OAuth access token obtained after the user authorizes the app. "
-            "Verifies the token against the GitHub API, then either logs in the existing account "
-            "or creates a new one. Returns JWT tokens and a flag indicating whether a new account "
-            "was created."
-        ),
+        summary="Sign in with GitHub (duplicate)",
+        description="Duplicate class - see earlier definition.",
         auth=[],
         request=inline_serializer(
-            name="GithubSocialAuthRequest",
+            name="GithubSocialAuthRequest2",
             fields={"access_token": serializers.CharField(help_text="GitHub OAuth access token.")},
         ),
         responses={
             200: OpenApiResponse(
                 description="Sign-in successful. JWT tokens issued.",
                 response=inline_serializer(
-                    name="GithubSocialAuthEnvelope",
+                    name="GithubSocialAuthEnvelope2",
                     fields={
                         "data": inline_serializer(
                             name="GithubSocialAuthData",

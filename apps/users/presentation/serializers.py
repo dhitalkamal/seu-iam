@@ -227,7 +227,7 @@ class InternalUserSerializer(serializers.Serializer):
 
 
 class FeatureFlagRequestSerializer(serializers.Serializer):
-    """Payload for creating or updating a feature flag."""
+    """Payload for creating a feature flag."""
 
     key = serializers.SlugField(max_length=100)
     name = serializers.CharField(max_length=200)
@@ -235,6 +235,16 @@ class FeatureFlagRequestSerializer(serializers.Serializer):
     is_enabled = serializers.BooleanField(default=False)
     enabled_plans = serializers.ListField(child=serializers.CharField(), default=list)
     enabled_org_ids = serializers.ListField(child=serializers.CharField(), default=list)
+
+
+class FeatureFlagUpdateSerializer(serializers.Serializer):
+    """Partial update payload for a feature flag - all fields optional."""
+
+    name = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(allow_blank=True, required=False)
+    is_enabled = serializers.BooleanField(required=False)
+    enabled_plans = serializers.ListField(child=serializers.CharField(), required=False)
+    enabled_org_ids = serializers.ListField(child=serializers.CharField(), required=False)
 
 
 class FeatureFlagResponseSerializer(serializers.Serializer):
