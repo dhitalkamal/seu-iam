@@ -22,15 +22,14 @@ class Command(BaseCommand):
     def handle(self, *args: object, **options: object) -> None:
         if User.objects.filter(is_superuser=True).exists():
             self.stdout.write("superadmin already exists, skipping seed")
-            return
-
-        User.objects.create_superuser(
-            email=DEFAULT_EMAIL,
-            password=DEFAULT_PASSWORD,
-            first_name=DEFAULT_FIRST,
-            last_name=DEFAULT_LAST,
-        )
-        self.stdout.write(self.style.SUCCESS(f"created superadmin: {DEFAULT_EMAIL}"))
+        else:
+            User.objects.create_superuser(
+                email=DEFAULT_EMAIL,
+                password=DEFAULT_PASSWORD,
+                first_name=DEFAULT_FIRST,
+                last_name=DEFAULT_LAST,
+            )
+            self.stdout.write(self.style.SUCCESS(f"created superadmin: {DEFAULT_EMAIL}"))
 
         self._seed_feature_flags()
 

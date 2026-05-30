@@ -13,12 +13,16 @@ class RegisterRequestSerializer(serializers.Serializer):
     confirm_password = serializers.CharField(write_only=True, min_length=8, max_length=128)
     first_name = serializers.CharField(max_length=150)
     last_name = serializers.CharField(max_length=150)
+    agreed_to_terms = serializers.BooleanField()
 
     def validate(self, attrs: dict) -> dict:
-        """Check that both password fields match, then remove confirm_password before returning."""
+        """Check passwords match and terms are accepted."""
         if attrs["password"] != attrs["confirm_password"]:
             raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        if not attrs.get("agreed_to_terms"):
+            raise serializers.ValidationError({"agreed_to_terms": "You must agree to the terms and conditions."})
         attrs.pop("confirm_password")
+        attrs.pop("agreed_to_terms")
         return attrs
 
 

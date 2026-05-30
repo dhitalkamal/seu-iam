@@ -12,6 +12,7 @@ def _valid_data(**overrides: str) -> dict:
         "confirm_password": "StrongPass1!",
         "first_name": "Kamal",
         "last_name": "Dhital",
+        "agreed_to_terms": True,
     }
     base.update(overrides)
     return base
