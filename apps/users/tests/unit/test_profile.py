@@ -54,9 +54,7 @@ def test_update_profile_changes_avatar_url():
     user = make_user()
     repo = FakeUserRepository([user])
 
-    updated = UpdateProfileUseCase(repo).execute(
-        user.id, avatar_url="https://cdn.example.com/pic.png"
-    )
+    updated = UpdateProfileUseCase(repo).execute(user.id, avatar_url="https://cdn.example.com/pic.png")
 
     assert updated.avatar_url == "https://cdn.example.com/pic.png"
 

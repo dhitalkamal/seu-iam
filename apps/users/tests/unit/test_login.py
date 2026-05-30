@@ -20,9 +20,7 @@ from apps.users.tests.unit.fakes import FakeTokenService, FakeUserRepository, ma
 def test_valid_credentials_return_tokens():
     """Correct credentials for a verified, active account return access and refresh tokens."""
     user = make_user(email="ok@example.com", password_hash=make_password("StrongPass1!"))
-    result = LoginUseCase(FakeUserRepository([user]), FakeTokenService()).execute(
-        "ok@example.com", "StrongPass1!"
-    )
+    result = LoginUseCase(FakeUserRepository([user]), FakeTokenService()).execute("ok@example.com", "StrongPass1!")
 
     assert result.mfa_required is False
     assert result.access_token is not None
@@ -37,9 +35,7 @@ def test_mfa_enabled_returns_challenge():
         password_hash=make_password("StrongPass1!"),
         mfa_enabled=True,
     )
-    result = LoginUseCase(FakeUserRepository([user]), FakeTokenService()).execute(
-        "mfa@example.com", "StrongPass1!"
-    )
+    result = LoginUseCase(FakeUserRepository([user]), FakeTokenService()).execute("mfa@example.com", "StrongPass1!")
 
     assert result.mfa_required is True
     assert result.user_id == user.id
@@ -79,9 +75,7 @@ def test_unverified_account_raises():
     """Accounts with is_email_verified=False cannot log in."""
     user = make_user(is_email_verified=False, password_hash=make_password("StrongPass1!"))
     with pytest.raises(AccountNotVerifiedError):
-        LoginUseCase(FakeUserRepository([user]), FakeTokenService()).execute(
-            user.email, "StrongPass1!"
-        )
+        LoginUseCase(FakeUserRepository([user]), FakeTokenService()).execute(user.email, "StrongPass1!")
 
 
 def test_wrong_password_increments_failed_attempts():

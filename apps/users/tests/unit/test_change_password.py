@@ -19,12 +19,8 @@ def _user_with_password(raw: str) -> object:
     return make_user(password_hash=make_password(raw))
 
 
-def _uc(
-    repo: FakeUserRepository, blacklist: FakeTokenBlacklistService | None = None
-) -> ChangePasswordUseCase:
-    return ChangePasswordUseCase(
-        repo, blacklist or FakeTokenBlacklistService(), FakePasswordHistoryService()
-    )
+def _uc(repo: FakeUserRepository, blacklist: FakeTokenBlacklistService | None = None) -> ChangePasswordUseCase:
+    return ChangePasswordUseCase(repo, blacklist or FakeTokenBlacklistService(), FakePasswordHistoryService())
 
 
 def test_change_password_updates_hash():
@@ -43,9 +39,7 @@ def test_change_password_invalidates_all_sessions():
     repo = FakeUserRepository([user])
     blacklist = FakeTokenBlacklistService()
 
-    _uc(repo, blacklist).execute(
-        user_id=user.id, current_password="OldPass1!", new_password="NewPass99!"
-    )
+    _uc(repo, blacklist).execute(user_id=user.id, current_password="OldPass1!", new_password="NewPass99!")
 
     assert user.id in blacklist.invalidated_users
 

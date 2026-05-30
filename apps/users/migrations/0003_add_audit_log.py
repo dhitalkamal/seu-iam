@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'db_table': '"iam"."audit_log"',
+                'db_table': "iam_audit_log",
                 'ordering': ['-created_at'],
             },
         ),

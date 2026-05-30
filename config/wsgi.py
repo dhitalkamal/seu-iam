@@ -1,4 +1,5 @@
 """WSGI entry point for the iam-service."""
+
 from __future__ import annotations
 
 import os

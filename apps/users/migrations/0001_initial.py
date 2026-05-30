@@ -13,10 +13,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="CREATE SCHEMA IF NOT EXISTS iam;",
-            reverse_sql="DROP SCHEMA IF EXISTS iam CASCADE;",
-        ),
         migrations.CreateModel(
             name="User",
             fields=[
@@ -76,7 +72,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "db_table": '"iam"."user"',
+                "db_table": "iam_user",
             },
         ),
     ]

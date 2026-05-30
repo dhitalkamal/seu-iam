@@ -46,9 +46,7 @@ def test_request_reset_raises_for_unknown_email():
     repo = FakeUserRepository()
 
     with pytest.raises(UserNotFoundError):
-        RequestPasswordResetUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(
-            email="ghost@example.com"
-        )
+        RequestPasswordResetUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(email="ghost@example.com")
 
 
 def test_request_reset_raises_when_email_not_verified():
@@ -57,6 +55,4 @@ def test_request_reset_raises_when_email_not_verified():
     repo = FakeUserRepository([user])
 
     with pytest.raises(AccountNotVerifiedError):
-        RequestPasswordResetUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(
-            email=user.email
-        )
+        RequestPasswordResetUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(email=user.email)

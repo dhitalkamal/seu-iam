@@ -13,7 +13,7 @@ class AuditLog(models.Model):
     """Security audit trail entry stored in the iam schema."""
 
     class Meta:
-        db_table = '"iam"."audit_log"'
+        db_table = "iam_audit_log"
         ordering = ["-created_at"]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

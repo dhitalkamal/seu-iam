@@ -63,9 +63,7 @@ def test_register_unverified_email_resends_otp():
     repo = FakeUserRepository([existing])
     publisher = FakeEventPublisher()
 
-    result = RegisterUseCase(repo, FakeOTPService(), publisher).execute(
-        "stuck@example.com", "StrongPass1!", "A", "B"
-    )
+    result = RegisterUseCase(repo, FakeOTPService(), publisher).execute("stuck@example.com", "StrongPass1!", "A", "B")
 
     assert result.id == existing.id
     assert len(publisher.events) == 1
@@ -97,9 +95,7 @@ def test_register_publishes_email_verification_event():
     """Registration fires an email_verification_requested event with email and OTP."""
     repo = FakeUserRepository()
     publisher = FakeEventPublisher()
-    user = RegisterUseCase(repo, FakeOTPService(), publisher).execute(
-        "pub@example.com", "StrongPass1!", "P", "Q"
-    )
+    user = RegisterUseCase(repo, FakeOTPService(), publisher).execute("pub@example.com", "StrongPass1!", "P", "Q")
 
     assert len(publisher.events) == 1
     event_name, payload = publisher.events[0]
@@ -112,8 +108,6 @@ def test_register_generates_and_stores_otp():
     """An OTP is generated for the new user and stored in the OTP service."""
     repo = FakeUserRepository()
     otp_svc = FakeOTPService()
-    user = RegisterUseCase(repo, otp_svc, FakeEventPublisher()).execute(
-        "otp@example.com", "StrongPass1!", "O", "P"
-    )
+    user = RegisterUseCase(repo, otp_svc, FakeEventPublisher()).execute("otp@example.com", "StrongPass1!", "O", "P")
 
     assert user.id in otp_svc._store  # type: ignore[attr-defined]

@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('is_active', models.BooleanField(db_index=True, default=True)),
             ],
             options={
-                'db_table': '"iam"."user_session"',
+                'db_table': "iam_user_session",
                 'ordering': ['-created_at'],
             },
         ),

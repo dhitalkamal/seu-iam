@@ -31,9 +31,5 @@ class PasswordHistoryService(IPasswordHistoryService):
     def record(self, user_id: uuid.UUID, password_hash: str) -> None:
         """Store the new hash and prune entries beyond the limit."""
         PasswordHistory.objects.create(user_id=user_id, password_hash=password_hash)
-        ids_to_keep = list(
-            PasswordHistory.objects.filter(user_id=user_id)
-            .order_by("-created_at")
-            .values_list("id", flat=True)[: _max()]
-        )
+        ids_to_keep = list(PasswordHistory.objects.filter(user_id=user_id).order_by("-created_at").values_list("id", flat=True)[: _max()])
         PasswordHistory.objects.filter(user_id=user_id).exclude(id__in=ids_to_keep).delete()

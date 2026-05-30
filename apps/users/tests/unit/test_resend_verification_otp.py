@@ -36,9 +36,7 @@ def test_resend_raises_when_already_verified():
     repo = FakeUserRepository([user])
 
     with pytest.raises(EmailAlreadyVerifiedError):
-        ResendVerificationOTPUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(
-            email=user.email
-        )
+        ResendVerificationOTPUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(email=user.email)
 
 
 def test_resend_raises_for_unknown_email():
@@ -46,9 +44,7 @@ def test_resend_raises_for_unknown_email():
     repo = FakeUserRepository()
 
     with pytest.raises(UserNotFoundError):
-        ResendVerificationOTPUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(
-            email="ghost@example.com"
-        )
+        ResendVerificationOTPUseCase(repo, FakeOTPService(), FakeEventPublisher()).execute(email="ghost@example.com")
 
 
 def test_resend_overwrites_existing_otp():

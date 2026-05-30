@@ -9,7 +9,7 @@ class UserSession(models.Model):
     """Tracks an issued refresh token with device context for session management."""
 
     class Meta:
-        db_table = '"iam"."user_session"'
+        db_table = "iam_user_session"
         ordering = ["-created_at"]
 
     jti = models.UUIDField(primary_key=True)

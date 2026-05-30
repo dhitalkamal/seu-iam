@@ -63,9 +63,7 @@ def test_enable_sets_mfa_enabled_true():
     user = make_user(mfa_enabled=False, mfa_secret=FakeTOTPService.FIXED_SECRET)
     repo = FakeUserRepository([user])
 
-    EnableMFAUseCase(repo, FakeTOTPService()).execute(
-        user_id=user.id, code=FakeTOTPService.VALID_CODE
-    )
+    EnableMFAUseCase(repo, FakeTOTPService()).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
     assert repo.get_by_id(user.id).mfa_enabled is True
 
@@ -94,9 +92,7 @@ def test_enable_raises_when_already_enabled():
     repo = FakeUserRepository([user])
 
     with pytest.raises(MFAAlreadyEnabledError):
-        EnableMFAUseCase(repo, FakeTOTPService()).execute(
-            user_id=user.id, code=FakeTOTPService.VALID_CODE
-        )
+        EnableMFAUseCase(repo, FakeTOTPService()).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
 
 # disable
@@ -107,9 +103,7 @@ def test_disable_clears_mfa():
     user = make_user(mfa_enabled=True, mfa_secret=FakeTOTPService.FIXED_SECRET)
     repo = FakeUserRepository([user])
 
-    DisableMFAUseCase(repo, FakeTOTPService()).execute(
-        user_id=user.id, code=FakeTOTPService.VALID_CODE
-    )
+    DisableMFAUseCase(repo, FakeTOTPService()).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
     updated = repo.get_by_id(user.id)
     assert updated.mfa_enabled is False
@@ -131,9 +125,7 @@ def test_disable_raises_when_not_enabled():
     repo = FakeUserRepository([user])
 
     with pytest.raises(MFANotEnabledError):
-        DisableMFAUseCase(repo, FakeTOTPService()).execute(
-            user_id=user.id, code=FakeTOTPService.VALID_CODE
-        )
+        DisableMFAUseCase(repo, FakeTOTPService()).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
 
 # challenge
@@ -145,9 +137,7 @@ def test_challenge_returns_tokens_on_valid_code():
     repo = FakeUserRepository([user])
     token_svc = FakeTokenService()
 
-    result = MFAChallengeUseCase(repo, FakeTOTPService(), token_svc).execute(
-        user_id=user.id, code=FakeTOTPService.VALID_CODE
-    )
+    result = MFAChallengeUseCase(repo, FakeTOTPService(), token_svc).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
     assert result.access_token == f"access-{user.id}"
     assert result.refresh_token == f"refresh-{user.id}"
@@ -159,9 +149,7 @@ def test_challenge_raises_on_invalid_code():
     repo = FakeUserRepository([user])
 
     with pytest.raises(InvalidTOTPError):
-        MFAChallengeUseCase(repo, FakeTOTPService(), FakeTokenService()).execute(
-            user_id=user.id, code="000000"
-        )
+        MFAChallengeUseCase(repo, FakeTOTPService(), FakeTokenService()).execute(user_id=user.id, code="000000")
 
 
 def test_challenge_raises_when_mfa_not_enabled():
@@ -170,6 +158,4 @@ def test_challenge_raises_when_mfa_not_enabled():
     repo = FakeUserRepository([user])
 
     with pytest.raises(InvalidCredentialsError):
-        MFAChallengeUseCase(repo, FakeTOTPService(), FakeTokenService()).execute(
-            user_id=user.id, code=FakeTOTPService.VALID_CODE
-        )
+        MFAChallengeUseCase(repo, FakeTOTPService(), FakeTokenService()).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)

@@ -76,9 +76,7 @@ def test_gdpr_erasure_anonymises_pii():
     user = make_user(password_hash=make_password("TestPass1!"))
     repo = FakeUserRepository([user])
 
-    GDPRErasureUseCase(repo, FakeTokenBlacklistService()).execute(
-        user_id=user.id, current_password="TestPass1!"
-    )
+    GDPRErasureUseCase(repo, FakeTokenBlacklistService()).execute(user_id=user.id, current_password="TestPass1!")
 
     updated = repo.get_by_id(user.id)
     assert "redacted.sansaar.com" in updated.email
@@ -105,9 +103,7 @@ def test_gdpr_erasure_rejects_wrong_password():
     repo = FakeUserRepository([user])
 
     with pytest.raises(InvalidCredentialsError):
-        GDPRErasureUseCase(repo, FakeTokenBlacklistService()).execute(
-            user_id=user.id, current_password="WrongPass!"
-        )
+        GDPRErasureUseCase(repo, FakeTokenBlacklistService()).execute(user_id=user.id, current_password="WrongPass!")
 
 
 def test_gdpr_erasure_social_auth_user_exempt_from_password():
@@ -115,8 +111,6 @@ def test_gdpr_erasure_social_auth_user_exempt_from_password():
     user = make_user(password_hash=make_password(None))
     repo = FakeUserRepository([user])
 
-    GDPRErasureUseCase(repo, FakeTokenBlacklistService()).execute(
-        user_id=user.id, current_password=None
-    )
+    GDPRErasureUseCase(repo, FakeTokenBlacklistService()).execute(user_id=user.id, current_password=None)
 
     assert repo.get_by_id(user.id).is_active is False

@@ -29,9 +29,7 @@ def test_enable_mfa_returns_backup_codes():
     repo = FakeUserRepository([user])
     backup_svc = FakeBackupCodeService()
 
-    result = EnableMFAUseCase(repo, FakeTOTPService(), backup_svc).execute(
-        user_id=user.id, code=FakeTOTPService.VALID_CODE
-    )
+    result = EnableMFAUseCase(repo, FakeTOTPService(), backup_svc).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
     assert len(result.backup_codes) == FakeBackupCodeService.CODE_COUNT
     assert all(len(c) == 8 for c in result.backup_codes)
@@ -42,9 +40,7 @@ def test_enable_mfa_without_backup_service_still_works():
     user = make_user(mfa_enabled=False, mfa_secret=FakeTOTPService.FIXED_SECRET)
     repo = FakeUserRepository([user])
 
-    result = EnableMFAUseCase(repo, FakeTOTPService()).execute(
-        user_id=user.id, code=FakeTOTPService.VALID_CODE
-    )
+    result = EnableMFAUseCase(repo, FakeTOTPService()).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
     assert result.backup_codes == []
 
@@ -75,9 +71,7 @@ def test_challenge_raises_on_invalid_backup_code():
     backup_svc.generate(user.id)
 
     with pytest.raises((InvalidTOTPError, InvalidBackupCodeError)):
-        MFAChallengeUseCase(repo, FakeTOTPService(), FakeTokenService(), backup_svc).execute(
-            user_id=user.id, code="BADCODE1"
-        )
+        MFAChallengeUseCase(repo, FakeTOTPService(), FakeTokenService(), backup_svc).execute(user_id=user.id, code="BADCODE1")
 
 
 def test_challenge_totp_still_works_when_backup_service_present():
@@ -85,9 +79,9 @@ def test_challenge_totp_still_works_when_backup_service_present():
     user = make_user(mfa_enabled=True, mfa_secret=FakeTOTPService.FIXED_SECRET)
     repo = FakeUserRepository([user])
 
-    result = MFAChallengeUseCase(
-        repo, FakeTOTPService(), FakeTokenService(), FakeBackupCodeService()
-    ).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
+    result = MFAChallengeUseCase(repo, FakeTOTPService(), FakeTokenService(), FakeBackupCodeService()).execute(
+        user_id=user.id, code=FakeTOTPService.VALID_CODE
+    )
 
     assert result.used_backup_code is False
 
@@ -112,9 +106,7 @@ def test_regenerate_requires_valid_totp():
     repo = FakeUserRepository([user])
 
     with pytest.raises(InvalidTOTPError):
-        RegenerateBackupCodesUseCase(repo, FakeTOTPService(), FakeBackupCodeService()).execute(
-            user_id=user.id, code="000000"
-        )
+        RegenerateBackupCodesUseCase(repo, FakeTOTPService(), FakeBackupCodeService()).execute(user_id=user.id, code="000000")
 
 
 def test_regenerate_returns_new_codes():
@@ -123,8 +115,6 @@ def test_regenerate_returns_new_codes():
     repo = FakeUserRepository([user])
     backup_svc = FakeBackupCodeService()
 
-    codes = RegenerateBackupCodesUseCase(repo, FakeTOTPService(), backup_svc).execute(
-        user_id=user.id, code=FakeTOTPService.VALID_CODE
-    )
+    codes = RegenerateBackupCodesUseCase(repo, FakeTOTPService(), backup_svc).execute(user_id=user.id, code=FakeTOTPService.VALID_CODE)
 
     assert len(codes) == FakeBackupCodeService.CODE_COUNT

@@ -60,9 +60,7 @@ def test_google_auth_raises_on_invalid_token():
     repo = FakeUserRepository()
 
     with pytest.raises(SocialAuthError):
-        GoogleSocialAuthUseCase(repo, FakeGoogleTokenVerifier(), FakeTokenService()).execute(
-            id_token="bad-token"
-        )
+        GoogleSocialAuthUseCase(repo, FakeGoogleTokenVerifier(), FakeTokenService()).execute(id_token="bad-token")
 
 
 def test_google_auth_raises_for_inactive_account():
@@ -71,18 +69,14 @@ def test_google_auth_raises_for_inactive_account():
     repo = FakeUserRepository([inactive])
 
     with pytest.raises(AccountInactiveError):
-        GoogleSocialAuthUseCase(repo, FakeGoogleTokenVerifier(), FakeTokenService()).execute(
-            id_token=FakeGoogleTokenVerifier.VALID_TOKEN
-        )
+        GoogleSocialAuthUseCase(repo, FakeGoogleTokenVerifier(), FakeTokenService()).execute(id_token=FakeGoogleTokenVerifier.VALID_TOKEN)
 
 
 def test_google_auth_new_user_has_unusable_password():
     """New Google users have no usable password (cannot log in with email/password)."""
     repo = FakeUserRepository()
 
-    GoogleSocialAuthUseCase(repo, FakeGoogleTokenVerifier(), FakeTokenService()).execute(
-        id_token=FakeGoogleTokenVerifier.VALID_TOKEN
-    )
+    GoogleSocialAuthUseCase(repo, FakeGoogleTokenVerifier(), FakeTokenService()).execute(id_token=FakeGoogleTokenVerifier.VALID_TOKEN)
 
     user = repo.get_by_email(FakeGoogleTokenVerifier.PAYLOAD["email"])
     assert user.password_hash.startswith("!")

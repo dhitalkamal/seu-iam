@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
                 ('used_at', models.DateTimeField(blank=True, null=True)),
             ],
             options={
-                'db_table': '"iam"."mfa_backup_code"',
+                'db_table': "iam_mfa_backup_code",
                 'ordering': ['created_at'],
             },
         ),

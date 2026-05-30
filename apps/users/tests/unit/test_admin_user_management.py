@@ -26,6 +26,7 @@ def test_list_users_returns_all():
 def test_list_users_excludes_deleted():
     """ListUsersUseCase excludes soft-deleted users."""
     from datetime import datetime, timezone
+
     active = make_user(email="active@test.com")
     deleted = make_user(email="deleted@test.com", deleted_at=datetime.now(timezone.utc))
     repo = FakeUserRepository([active, deleted])

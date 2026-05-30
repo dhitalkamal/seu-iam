@@ -50,17 +50,13 @@ _ERROR_ENVELOPE = inline_serializer(
     },
 )
 
-_R401 = OpenApiResponse(
-    description="Authentication credentials are missing or invalid.", response=_ERROR_ENVELOPE
-)
+_R401 = OpenApiResponse(description="Authentication credentials are missing or invalid.", response=_ERROR_ENVELOPE)
 _R403 = OpenApiResponse(description="Password confirmation failed.", response=_ERROR_ENVELOPE)
 _R404 = OpenApiResponse(description="Session not found.", response=_ERROR_ENVELOPE)
 _R422 = OpenApiResponse(description="Validation error.", response=_ERROR_ENVELOPE)
 
 
-def _audit(
-    request: Request, user_id: uuid.UUID, event_type: str, metadata: dict | None = None
-) -> None:
+def _audit(request: Request, user_id: uuid.UUID, event_type: str, metadata: dict | None = None) -> None:
     """Write an audit log entry, swallowing any persistence errors."""
     AuditService(DjangoAuditLogRepository()).log(request, user_id, event_type, metadata)
 
@@ -71,10 +67,7 @@ class AuditAwareTokenRefreshView(BaseTokenRefreshView):
     @extend_schema(
         tags=["Auth"],
         summary="Refresh access token",
-        description=(
-            "Exchange a valid refresh token for a new access token. "
-            "Updates the session last_seen timestamp."
-        ),
+        description=("Exchange a valid refresh token for a new access token. Updates the session last_seen timestamp."),
         responses={
             200: OpenApiResponse(description="New access token issued."),
             401: _R401,
@@ -189,10 +182,7 @@ class GDPRExportView(APIView):
     @extend_schema(
         tags=["GDPR"],
         summary="Export personal data",
-        description=(
-            "Returns all personal data held for the authenticated user. "
-            "Use ?format=csv for a CSV download, or omit for JSON."
-        ),
+        description=("Returns all personal data held for the authenticated user. Use ?format=csv for a CSV download, or omit for JSON."),
         responses={
             200: OpenApiResponse(description="Personal data export."),
             401: _R401,
@@ -201,9 +191,7 @@ class GDPRExportView(APIView):
     def get(self, request: Request) -> Response | HttpResponse:
         """Compile and return the user's personal data as JSON or CSV."""
         user_id = uuid.UUID(str(request.user.id))  # type: ignore[attr-defined]
-        data = GDPRExportUseCase(DjangoUserRepository(), DjangoAuditLogRepository()).execute(
-            user_id=user_id
-        )
+        data = GDPRExportUseCase(DjangoUserRepository(), DjangoAuditLogRepository()).execute(user_id=user_id)
         _audit(request, user_id, AuditEventType.GDPR_EXPORT_REQUESTED)
 
         if request.query_params.get("format") == "csv":
@@ -277,6 +265,4 @@ class GDPRErasureView(APIView):
         )
 
         _audit(request, user_id, AuditEventType.GDPR_ERASURE_COMPLETED)
-        return success_response(
-            {"message": "Account erased. All personal data anonymized."}, request=request
-        )
+        return success_response({"message": "Account erased. All personal data anonymized."}, request=request)

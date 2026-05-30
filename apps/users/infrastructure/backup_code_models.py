@@ -11,7 +11,7 @@ class MFABackupCode(models.Model):
     """A single-use hashed backup code for MFA recovery."""
 
     class Meta:
-        db_table = '"iam"."mfa_backup_code"'
+        db_table = "iam_mfa_backup_code"
         ordering = ["created_at"]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -52,9 +52,7 @@ class SessionService:
 
     def revoke_session(self, jti: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Mark a specific session inactive. Returns True if it existed and was active."""
-        updated = UserSession.objects.filter(jti=jti, user_id=user_id, is_active=True).update(
-            is_active=False
-        )
+        updated = UserSession.objects.filter(jti=jti, user_id=user_id, is_active=True).update(is_active=False)
         return updated > 0
 
     def revoke_all_for_user(self, user_id: uuid.UUID) -> None:

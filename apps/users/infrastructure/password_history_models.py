@@ -9,7 +9,7 @@ class PasswordHistory(models.Model):
     """Stores the last N hashed passwords per user to prevent reuse."""
 
     class Meta:
-        db_table = '"iam"."password_history"'
+        db_table = "iam_password_history"
         ordering = ["-created_at"]
 
     user_id = models.UUIDField(db_index=True)

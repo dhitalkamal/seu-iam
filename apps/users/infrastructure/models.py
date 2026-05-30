@@ -35,7 +35,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     """Platform user. Email is the login credential."""
 
     class Meta:
-        db_table = '"iam"."user"'
+        db_table = "iam_user"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, max_length=255)

@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'db_table': '"iam"."password_history"',
+                'db_table': "iam_password_history",
                 'ordering': ['-created_at'],
             },
         ),

@@ -49,18 +49,12 @@ _ERROR = inline_serializer(
     },
 )
 
-_R400 = OpenApiResponse(
-    description="Invalid TOTP code or no backup codes remaining.", response=_ERROR
-)
-_R401 = OpenApiResponse(
-    description="Authentication credentials are missing or invalid.", response=_ERROR
-)
+_R400 = OpenApiResponse(description="Invalid TOTP code or no backup codes remaining.", response=_ERROR)
+_R401 = OpenApiResponse(description="Authentication credentials are missing or invalid.", response=_ERROR)
 _R409 = OpenApiResponse(description="MFA is not enabled on this account.", response=_ERROR)
 
 
-def _audit(
-    request: Request, user_id: uuid.UUID, event_type: str, metadata: dict | None = None
-) -> None:
+def _audit(request: Request, user_id: uuid.UUID, event_type: str, metadata: dict | None = None) -> None:
     """Write an audit log entry, swallowing persistence errors."""
     AuditService(DjangoAuditLogRepository()).log(request, user_id, event_type, metadata)
 
@@ -73,10 +67,7 @@ class BackupCodeStatusView(APIView):
     @extend_schema(
         tags=["MFA"],
         summary="Backup code status",
-        description=(
-            "Returns the number of unused backup codes remaining. "
-            "The codes themselves are never shown after initial generation."
-        ),
+        description=("Returns the number of unused backup codes remaining. The codes themselves are never shown after initial generation."),
         responses={
             200: OpenApiResponse(
                 description="Backup code count.",
@@ -137,9 +128,9 @@ class RegenerateBackupCodesView(APIView):
         ser.is_valid(raise_exception=True)
 
         user_id = uuid.UUID(str(request.user.id))  # type: ignore[attr-defined]
-        codes = RegenerateBackupCodesUseCase(
-            DjangoUserRepository(), PyOTPService(), BackupCodeService()
-        ).execute(user_id=user_id, code=ser.validated_data["code"])
+        codes = RegenerateBackupCodesUseCase(DjangoUserRepository(), PyOTPService(), BackupCodeService()).execute(
+            user_id=user_id, code=ser.validated_data["code"]
+        )
 
         _audit(request, user_id, AuditEventType.MFA_ENABLED, {"action": "backup_codes_regenerated"})
         return success_response({"backup_codes": codes}, request=request)
