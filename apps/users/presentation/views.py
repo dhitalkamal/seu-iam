@@ -1071,8 +1071,7 @@ class InternalUserView(APIView):
 class InternalUserBatchView(APIView):
     """Batch resolve user IDs to names for cross-service display."""
 
-    authentication_classes: list = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=["Internal"],
