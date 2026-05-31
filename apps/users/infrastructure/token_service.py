@@ -33,10 +33,14 @@ class JWTTokenService(ITokenService):
         org_roles = OrgRoleClient().get_org_roles(user_id)
         refresh = RefreshToken.for_user(user)
         refresh["email"] = user.email
+        refresh["first_name"] = user.first_name
+        refresh["last_name"] = user.last_name
         refresh["is_staff"] = user.is_staff
         refresh["is_superuser"] = user.is_superuser
         refresh["org_roles"] = org_roles
         refresh.access_token["email"] = user.email
+        refresh.access_token["first_name"] = user.first_name
+        refresh.access_token["last_name"] = user.last_name
         refresh.access_token["is_staff"] = user.is_staff
         refresh.access_token["is_superuser"] = user.is_superuser
         refresh.access_token["org_roles"] = org_roles

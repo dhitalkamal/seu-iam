@@ -26,6 +26,7 @@ from apps.users.presentation.views import (
     AdminUserSuspendView,
     ChangePasswordView,
     ConfirmPasswordResetView,
+    GithubSocialAuthView,
     GoogleSocialAuthView,
     HealthCheckView,
     InternalUserView,
@@ -92,6 +93,7 @@ urlpatterns: list[URLPattern] = [
     ),
     # social auth
     path("auth/social/google/", GoogleSocialAuthView.as_view(), name="auth-social-google"),
+    path("auth/social/github/", GithubSocialAuthView.as_view(), name="auth-social-github"),
     path("auth/jwks/", JWKSView.as_view(), name="auth-jwks"),
     # sessions
     path("auth/sessions/", ListSessionsView.as_view(), name="auth-sessions"),
