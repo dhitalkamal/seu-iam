@@ -62,12 +62,44 @@ def _handle_audit_event(payload: dict) -> None:
     logger.info("Audit entry written: %s for user %s.", event_type, user_id)
 
 
+def _handle_iam_event(payload: dict) -> None:
+    """Write iam.* events to audit log for traceability."""
+    raw_uid = payload.get("user_id")
+    if not raw_uid:
+        logger.debug("iam event missing user_id, skipping audit write.")
+        return
+    try:
+        user_id = uuid.UUID(str(raw_uid))
+    except ValueError:
+        logger.warning("iam event has invalid user_id %r, skipping.", raw_uid)
+        return
+
+    event_type = payload.get("event_type", "unknown")
+    AuditLog.objects.create(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        event_type=event_type,
+        ip_address=payload.get("ip_address"),
+        user_agent=payload.get("user_agent"),
+        metadata=payload.get("metadata") or {},
+    )
+    logger.info("IAM audit entry written: %s for user %s.", event_type, user_id)
+
+
 # routing key -> handler function
 _HANDLERS: dict[str, Callable[[dict], None]] = {
     "org.member.added": _handle_member_event,
     "org.member.removed": _handle_member_event,
     "org.member.role_changed": _handle_member_event,
     "audit.log": _handle_audit_event,
+    "iam.email_verification_requested": _handle_iam_event,
+    "iam.password_reset_requested": _handle_iam_event,
+    "iam.password_changed": _handle_iam_event,
+    "iam.mfa_enabled": _handle_iam_event,
+    "iam.mfa_disabled": _handle_iam_event,
+    "iam.account_locked": _handle_iam_event,
+    "iam.mfa_email_otp_requested": _handle_iam_event,
+    "iam.mfa_sms_otp_requested": _handle_iam_event,
 }
 
 
