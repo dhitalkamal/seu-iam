@@ -1068,6 +1068,56 @@ class InternalUserView(APIView):
         return success_response(InternalUserSerializer(entity).data, request=request)
 
 
+class InternalUserBatchView(APIView):
+    """Batch resolve user IDs to names for cross-service display."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Internal"],
+        summary="Batch resolve user IDs to names",
+        request=inline_serializer(
+            name="BatchUserRequest",
+            fields={"ids": serializers.ListField(child=serializers.UUIDField())},
+        ),
+        responses={200: OpenApiResponse(description="User map keyed by ID.")},
+    )
+    def post(self, request: Request) -> Response:
+        """Accept a list of user IDs and return a dict of id -> user info."""
+        raw_ids = request.data.get("ids", [])
+        if not isinstance(raw_ids, list) or len(raw_ids) > 100:
+            return error_response(
+                code="ERR_INVALID",
+                message="ids must be a list of up to 100 UUIDs.",
+                http_status=400,
+                request=request,
+            )
+        from apps.users.infrastructure.models import User
+
+        valid_ids = []
+        for rid in raw_ids:
+            try:
+                valid_ids.append(uuid.UUID(str(rid)))
+            except ValueError:
+                continue
+
+        users = User.objects.filter(id__in=valid_ids).values("id", "email", "first_name", "last_name", "avatar_url")
+        result = {}
+        for u in users:
+            uid = str(u["id"])
+            first = u["first_name"] or ""
+            last = u["last_name"] or ""
+            result[uid] = {
+                "id": uid,
+                "email": u["email"],
+                "first_name": first,
+                "last_name": last,
+                "full_name": f"{first} {last}".strip() or u["email"],
+                "avatar_url": u.get("avatar_url"),
+            }
+        return success_response(result, request=request)
+
+
 class GoogleSocialAuthView(APIView):
     """Sign in or register with a Google ID token."""
 
