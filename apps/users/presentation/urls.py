@@ -29,6 +29,7 @@ from apps.users.presentation.views import (
     GithubSocialAuthView,
     GoogleSocialAuthView,
     HealthCheckView,
+    InternalUserBatchView,
     InternalUserView,
     JWKSView,
     LoginView,
@@ -100,10 +101,13 @@ urlpatterns: list[URLPattern] = [
     path("auth/sessions/<uuid:jti>/", RevokeSessionView.as_view(), name="auth-session-revoke"),
     # profile
     path("profile/me/", ProfileView.as_view(), name="profile-me"),
+    # user name resolution (authenticated, not internal)
+    path("users/resolve/", InternalUserBatchView.as_view(), name="users-resolve"),
     # GDPR
     path("gdpr/export/", GDPRExportView.as_view(), name="gdpr-export"),
     path("gdpr/erasure/", GDPRErasureView.as_view(), name="gdpr-erasure"),
     # internal service-to-service
+    path("internal/users/batch/", InternalUserBatchView.as_view(), name="internal-users-batch"),
     path("internal/users/<uuid:user_id>/", InternalUserView.as_view(), name="internal-user"),
     # superadmin user management
     path("admin/users/", AdminUserListView.as_view(), name="admin-users"),
