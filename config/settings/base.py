@@ -1,4 +1,5 @@
 """Base Django settings for the iam-service."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -61,16 +62,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME"),
-        "USER": config("DB_USER"),
-        "PASSWORD": config("DB_PASSWORD"),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
+_DATABASE_URL = config("DATABASE_URL", default="")
+if _DATABASE_URL:
+    import dj_database_url
+
+    DATABASES = {"default": dj_database_url.parse(_DATABASE_URL, conn_max_age=600, ssl_require=True)}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME"),
+            "USER": config("DB_USER"),
+            "PASSWORD": config("DB_PASSWORD"),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="5432"),
+        }
     }
-}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -87,6 +94,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+AUTH_USER_MODEL = "users.User"
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -101,16 +110,20 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "apps.common.api.exceptions.api_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "password_reset": "3/hour",
+        "login": "20/hour",
+        "registration": "10/hour",
+    },
 }
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
-    "ACCESS_TOKEN_LIFETIME": timedelta(
-        minutes=config("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", default=15, cast=int)
-    ),
-    "REFRESH_TOKEN_LIFETIME": timedelta(
-        days=config("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7, cast=int)
-    ),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=config("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", default=60, cast=int)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=config("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7, cast=int)),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": False,
@@ -120,6 +133,13 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
 
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
+MANAGEMENT_SERVICE_URL = config("MANAGEMENT_SERVICE_URL", default="http://management:8006")
+OTP_TTL_SECONDS = config("OTP_TTL_SECONDS", default=600, cast=int)
+
+GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
+GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET", default="")
+
+PASSWORD_HISTORY_LIMIT = config("PASSWORD_HISTORY_LIMIT", default=5, cast=int)
 
 CACHES = {
     "default": {
@@ -133,6 +153,15 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Identity and Access Management service for the Sansaar platform.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+    "SERVE_AUTHENTICATION": [],
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/v1/",
 }
+
+# Security: account lockout after N failed attempts
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+ACCOUNT_LOCKOUT_MINUTES = 15
+
+# superadmin IP whitelist; empty list allows all staff (open in dev, explicit in prod)
+SUPERADMIN_ALLOWED_IPS: list[str] = config("SUPERADMIN_ALLOWED_IPS", default="", cast=Csv())
